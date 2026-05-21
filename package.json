@@ -41,6 +41,7 @@
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
+    "cross-env": "^10.1.0",
     "d3": "^7.9.0",
     "dotenv": "^16.4.5",
     "google-auth-library": "^10.3.0",
