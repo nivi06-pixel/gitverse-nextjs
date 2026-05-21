@@ -21,6 +21,7 @@ import {
   ArrowLeft,
   Trash2,
   Activity,
+  Copy,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/Skeleton";
 import Link from "next/link";
@@ -201,6 +202,25 @@ export default function RepositoryAnalysis() {
     }
   };
 
+  const handleCopyLink = async () => {
+  try {
+    await navigator.clipboard.writeText(window.location.href);
+
+    toast({
+      title: "Link copied",
+      description: "Analysis job link copied to clipboard.",
+    });
+  } catch (error) {
+    console.error("Failed to copy link:", error);
+
+    toast({
+      title: "Copy failed",
+      description: "Unable to copy analysis link.",
+      variant: "destructive",
+    });
+  }
+};
+
   const renderContent = () => {
     switch (activeTab) {
       case "overview":
@@ -296,6 +316,14 @@ export default function RepositoryAnalysis() {
                   )}
                 </div>
               </div>
+              <button
+  onClick={handleCopyLink}
+  className="glass p-2 rounded-lg hover:bg-white/10 transition-all duration-300 flex-shrink-0"
+  title="Copy analysis link"
+  aria-label="Copy analysis link"
+>
+  <Copy className="h-4 w-4 sm:h-5 sm:w-5" />
+</button>
               {/* Delete button */}
               <button
                 onClick={() => setShowDeleteDialog(true)}
