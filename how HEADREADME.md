@@ -148,8 +148,6 @@ gitverse-nextjs/
 - `npm run build` - Build for production
 - `npm start` - Start production server
 - `npm run lint` - Run Next.js linter
-- `npm run typecheck` - Run TypeScript type checking
-- `npm run verify` - Run lint + typecheck (use before opening a PR)
 - `npm run format` - Format code with Prettier
 - `npm run prisma:generate` - Generate Prisma client
 - `npm run prisma:migrate` - Run database migrations
@@ -291,7 +289,6 @@ cp .env.example .env.local
 | `DATABASE_URL` | PostgreSQL connection string (with SSL) | Create a free database on [Neon](https://neon.tech) → **Connection Details** → copy the connection string. Append `?sslmode=require&schema=public` if not already present. |
 | `JWT_SECRET` | Secret used to sign custom JWT tokens | Generate with `openssl rand -base64 32` or any random string ≥ 32 characters. |
 | `GEMINI_API_KEY` | Google Gemini API key for AI features | Go to [Google AI Studio](https://aistudio.google.com/app/apikey) → **Create API key**. |
-| `ANALYSIS_RUNNER_SECRET` | Secret to authorize the internal cron job runner endpoint in production | Generate with `openssl rand -base64 32`. Must be passed via `Authorization: Bearer <SECRET>` for cron triggering. |
 
 ### OAuth / NextAuth Variables
 
@@ -302,19 +299,18 @@ cp .env.example .env.local
 | `GOOGLE_CLIENT_ID` | Google OAuth 2.0 client ID | [Google Cloud Console](https://console.cloud.google.com) → **APIs & Services → Credentials → Create Credentials → OAuth client ID** (Web application). |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth 2.0 client secret | Obtained alongside `GOOGLE_CLIENT_ID` in the same step above. |
 
-### GitHub App Configuration
+### GitHub App Configuration (for PR reviews)
 
-GitVerse integrates heavily with GitHub via a GitHub App to read repositories, post PR reviews, and track issues. 
+GitVerse uses a GitHub App to analyze repositories and post PR reviews. 
 
-**Required GitHub App Permissions & Scopes:**
-To ensure full functionality, your GitHub App must be granted the following repository-level permissions:
-- **Contents:** Read-only (Required to fetch source code for AI analysis)
-- **Metadata:** Read-only (Mandatory basic read access for all GitHub Apps)
-- **Pull requests:** Read & Write (Required to read PR diffs and post review comments)
-- **Issues:** Read & Write (Required for tracking and commenting on issues)
-
-**Required Webhook Events:**
-- `Pull request` (Fires when PRs are opened or updated, triggering the AI review service)
+**Required Permissions:**
+When creating your GitHub App, ensure you grant the following permissions:
+- **Repository Permissions**:
+  - `Contents`: Read-only (Required to fetch repository code for analysis)
+  - `Metadata`: Read-only (Mandatory for all GitHub Apps)
+  - `Pull requests`: Read & Write (Required to read PR changes and post review comments)
+  - `Issues`: Read & Write (Required if tracking or commenting on issues)
+- **Subscribe to events**: `Pull request`
 
 | Variable | Description & Usage | How to obtain |
 | :--- | :--- | :--- |
@@ -322,12 +318,6 @@ To ensure full functionality, your GitHub App must be granted the following repo
 | `GITHUB_APP_PRIVATE_KEY` | RSA private key. Used to sign JWTs for GitHub API authentication. | In your GitHub App settings → **Generate a private key** → paste contents with literal `\n` line breaks. |
 | `GITHUB_APP_SLUG` | URL slug of your GitHub App. Used to generate installation URLs. | The part after `github.com/apps/` in the App's public URL. |
 | `GITHUB_WEBHOOK_SECRET` | Secret string. Used to verify that incoming webhook payloads genuinely came from GitHub. | Set any strong random string here and enter the same value in your GitHub App's webhook configuration. |
-
-**Local Development Setup for GitHub Apps:**
-1. Create a GitHub App in your developer settings.
-2. Use a service like ngrok (`ngrok http 3000`) to expose your local server.
-3. Set your App's Webhook URL to `https://<your-ngrok-url>/api/webhooks/github`.
-4. Add the App credentials to `.env.local`.
 
 ### Optional Variables
 
@@ -390,14 +380,6 @@ On Vercel, add it under **Settings → Environment Variables**.
 2. Verify the key is active in [Google AI Studio](https://aistudio.google.com/app/apikey).
 3. Check that the Gemini API is enabled for your Google Cloud project.
 
-### Internal Analysis Runner returning `500` or `401`
-
-**Cause:** The `ANALYSIS_RUNNER_SECRET` environment variable is missing in production or an incorrect authorization header was provided.
-
-**Fix:**
-1. Generate a strong random string (e.g., `openssl rand -base64 32`) and set it as `ANALYSIS_RUNNER_SECRET` in your deployment dashboard (e.g. Vercel).
-2. Configure your cron provider (like Vercel Cron or GitHub Actions) to send an `Authorization: Bearer <YOUR_SECRET>` HTTP header when triggering the `/api/internal/run-analysis` endpoint. In local development, the runner will execute without the secret, but in production, the authorization header is strictly enforced via a timing-safe validation.
-
 ### Environment variables not picked up after editing `.env.local`
 
 **Fix:** Restart the development server — Next.js reads `.env.local` only at startup:
@@ -448,21 +430,11 @@ npm run dev -- -p 3001
 **Symptoms:** PR reviews aren't posting, repo analysis fails, or webhook errors.
 
 **Fix:**
-- **Missing GitHub App Credentials:** Ensure `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, and other related variables are correctly populated in your `.env.local` or Vercel environment settings. Without these, PR reviews and repository analysis will fail. Build or deployment failures caused by missing secrets are usually flagged during the `npm run build` step.
-- **Invalid GitHub App IDs:** Ensure your `GITHUB_APP_ID` is a numeric string (not the client ID or slug).
-- **Incorrect Callback URLs:** Ensure the webhook URL in the GitHub App settings exactly matches your deployed domain's endpoint (e.g., `https://<your-domain>/api/webhooks/github`).
-- **Permission Denied / API Access Errors:** Verify your GitHub App has the exact permissions listed in the [GitHub App Configuration](#github-app-configuration) section (especially Read/Write on Pull Requests and Read on Contents). If you updated permissions on an existing App, you must accept the new permissions on your App installations.
-- **Vercel Deployment / Environment Setup Issues:** In Vercel, format the `GITHUB_APP_PRIVATE_KEY` correctly. Sometimes newlines get mangled during copy-pasting. Enclosing the key in double quotes in the Vercel dashboard or ensuring literal `\n` characters are used can prevent parsing errors.
-- **Authentication/Session Failures:** If `next-auth` sessions fail to read the GitHub token, ensure `NEXTAUTH_SECRET` is set and matches across your infrastructure.
-
-### Error-Handling Guidance for Developers
-
-When extending the GitHub integration or building new features, follow these error-handling practices:
-
-- **Detecting Missing Env Vars:** At application startup or within route handlers, explicitly check for `GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY`. If missing, log a clear warning and gracefully disable the GitHub-dependent features instead of crashing the server or UI.
-- **Safe API Validation:** Always wrap `githubService` or `octokit` calls in `try/catch` blocks. If `octokit.request` throws a `403 Forbidden` or `404 Not Found` (which often indicates a permission issue or missing repository access), handle it cleanly by returning a `403` or `404` JSON response with a safe, descriptive error string (e.g., `"Repository access denied. Check GitHub App permissions."`).
-- **Runtime Failure Behavior:** Ensure webhooks respond with a `200 OK` quickly, even if the internal AI analysis fails or throws an error. If you return a `500` to GitHub synchronously, they may disable your webhook after repeated failures. Use background jobs (like the analysis worker) or isolated error logging for the actual processing step.
-- **Common Integration Mistakes:** The most frequent developer mistake is forgetting to accept new permissions on the GitHub App installation after updating them in the App settings. Always remind users to navigate to their installation settings to approve permission scope changes.
+- **Missing Credentials:** Ensure `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, and other related variables are correctly populated in your `.env.local` or Vercel environment settings. Without these, PR reviews and repository analysis will fail. Build or deployment failures caused by missing secrets are usually flagged during the `npm run build` step.
+- **Permission Denied:** Verify your GitHub App has the exact permissions listed in the [GitHub App Configuration](#github-app-configuration-for-pr-reviews) section (especially Read/Write on Pull Requests and Read on Contents). If you updated permissions on an existing App, you must accept the new permissions on your App installations.
+- **Invalid Callback URL / Webhook:** Ensure the webhook URL in the GitHub App settings exactly matches your deployed domain's endpoint (e.g., `https://<your-domain>/api/integrations/github/webhook`).
+- **Vercel Environment Setup:** In Vercel, format the `GITHUB_APP_PRIVATE_KEY` correctly. Sometimes newlines get mangled during copy-pasting. Enclosing the key in double quotes in the Vercel dashboard or ensuring literal `\n` characters are used can prevent parsing errors.
+- **Error Handling (Local Dev):** If running locally, check your terminal for missing environment variable warnings at startup. If analysis fails silently, review the terminal logs for explicit GitHub API permission or authentication errors.
 
 ## 🤝 Contributing
 
@@ -470,11 +442,7 @@ When extending the GitHub integration or building new features, follow these err
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Run pre-PR validation to catch lint and type errors before opening a PR:
-   ```bash
-   npm run verify
-   ```
-6. Open a Pull Request
+5. Open a Pull Request
 
 ## 📄 License
 
