@@ -24,6 +24,8 @@ import {
   AlertCircle,
   Clock,
   RefreshCw,
+  RotateCcw,
+  SearchX,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -91,7 +93,7 @@ export default function RepositoryAnalysis() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const pollingStartedAt = useRef<number | null>(null);
-  // Tracks last time progress changed — prevents falsely timing out active jobs
+  // Tracks last time progress changed � prevents falsely timing out active jobs
   const lastProgressAt = useRef<number | null>(null);
   const elapsedTimer = useRef<NodeJS.Timeout | null>(null);
 
@@ -263,8 +265,36 @@ export default function RepositoryAnalysis() {
     }
   };
 
-  // ---------------- Delete ----------------
-  //  Delete 
+  // ── Re-analyze ─────────────────────────────────────────────────────
+  const handleReAnalyze = async () => {
+    if (!id) return;
+    try {
+      const token = localStorage.getItem("gitverse_token");
+      await axios.post(
+        buildApiUrl(`/api/repositories/${id}/analyze`),
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast({
+        title: "Analysis started",
+        description: "A new analysis job has been queued.",
+      });
+      pollingStartedAt.current = Date.now();
+      lastProgressAt.current = Date.now();
+      setElapsedSeconds(0);
+      setAnalysisTimedOut(false);
+      setAnalysisError(null);
+      await fetchRepository();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.response?.data?.error || "Failed to start analysis",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // ── Delete ────────────────────────────────────────────────────────
   const handleDeleteRepository = async () => {
     if (!id) return;
     setIsDeleting(true);
