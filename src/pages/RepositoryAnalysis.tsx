@@ -206,7 +206,7 @@ export default function RepositoryAnalysis() {
       // Use functional setJob so we always compare against the latest job
       // state, avoiding the stale-closure bug where the polling loop holds
       // an old snapshot of job and never sees progress-only updates.
-      setJob((prevJob) => {
+      setJob((prevJob: any) => {
         const prevPercent = prevJob?.progressPercent ?? null;
         const prevMessage = prevJob?.progressMessage ?? null;
         const nextPercent = nextJob?.progressPercent ?? null;
@@ -237,7 +237,6 @@ export default function RepositoryAnalysis() {
     }
   };
 
-  // â”€â”€ Delete â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleDeleteRepository = async () => {
     if (!id) return;
     setIsDeleting(true);
@@ -264,7 +263,7 @@ export default function RepositoryAnalysis() {
     }
   };
 
-  // â”€â”€ Tab content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  
   const renderContent = () => {
     switch (activeTab) {
       case "overview":     return <RepositoryOverview repositoryData={repository} />;
@@ -276,6 +275,7 @@ export default function RepositoryAnalysis() {
       default:             return <RepositoryOverview />;
     }
   };
+
 const lastAnalyzedDate = repository?.lastAnalyzedAt
   ? new Date(repository.lastAnalyzedAt)
   : null;
@@ -287,7 +287,16 @@ const formattedLastAnalyzed =
         timeStyle: "short",
       }).format(lastAnalyzedDate)
     : "Not available";
-  return (
+
+const formatElapsed = (secs: number) => {
+  if (secs < 60) return `${secs}s`;
+  return `${Math.floor(secs / 60)}m ${secs % 60}s`;
+};
+
+const progressPercent = job?.progressPercent ?? 0;
+const progressMessage = job?.progressMessage || "Queued";
+
+return (
     <DashboardLayout>
       <div className="space-y-6">
         {loading ? (
