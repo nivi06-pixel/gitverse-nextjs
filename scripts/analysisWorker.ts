@@ -138,7 +138,8 @@ async function runJob(
 
 export interface JobOutcome {
   jobId: string;
-  status: "processed" | "failed";
+  status: "processed" | "failed" | "errored";
+  error?: string;
 }
 
 export interface AnalysisWorkerSummary {
@@ -146,11 +147,11 @@ export interface AnalysisWorkerSummary {
   jobsProcessed: number;
   jobsSkipped: number;
   jobsFailed: number;
+  jobsErrored: number;
   executionDurationMs: number;
   jobOutcomes?: JobOutcome[];
   success: boolean;
-  budgetExhausted?: boolean;
-  earlyStopReason?: string;
+  jobOutcomes: JobOutcome[];
 }
 
 export async function startAnalysisWorkerLoop(opts?: {
@@ -175,6 +176,7 @@ export async function startAnalysisWorkerLoop(opts?: {
   let jobsProcessed = 0;
   let jobsSkipped = 0;
   let jobsFailed = 0;
+  let jobsErrored = 0;
   const jobOutcomes: JobOutcome[] = [];
 
   const shutdown = async (signal: string) => {
@@ -251,32 +253,37 @@ export async function startAnalysisWorkerLoop(opts?: {
         return;
       }
     } catch (e) {
-      console.error("worker loop error:", sanitizeErrorMessage(e));
+      jobsErrored++;
+      const safeMessage = sanitizeErrorMessage(e);
+      console.error("worker loop error:", safeMessage);
       if (opts?.once) {
         return {
           totalJobsScanned,
           jobsProcessed,
           jobsSkipped,
           jobsFailed,
+          jobsErrored,
           executionDurationMs: Date.now() - startTimeMs,
           jobOutcomes,
           success: false,
-          budgetExhausted,
-          earlyStopReason,
+          jobOutcomes,
         };
       }
       await sleep(pollIntervalMs);
     }
   }
 
+  const success = jobsFailed === 0 && jobsErrored === 0;
+
   return {
     totalJobsScanned,
     jobsProcessed,
     jobsSkipped,
     jobsFailed,
+    jobsErrored,
     executionDurationMs: Date.now() - startTimeMs,
+    success,
     jobOutcomes,
-    success: jobsFailed === 0,
   };
 }
 
