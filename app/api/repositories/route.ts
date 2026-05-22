@@ -3,6 +3,42 @@ import { isHttpError, requireAuth } from "@/lib/middleware";
 import { repositoryService } from "@/lib/services/repositoryService";
 import { analysisJobService } from "@/lib/services/analysisJobService";
 
+function normalizeKnownRepoHttpUrl(input: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(input);
+  } catch {
+    return null;
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+
+  const host = parsed.hostname.replace(/^www\./, "").toLowerCase();
+  const supportedHosts = new Set(["github.com", "gitlab.com", "bitbucket.org"]);
+  if (!supportedHosts.has(host)) return input;
+
+  const parts = parsed.pathname.split("/").filter(Boolean);
+  if (parts.length < 2) return null;
+
+  const owner = parts[0];
+  const repo = parts[1].replace(/\.git$/, "");
+  if (!owner || !repo) return null;
+
+  return `${parsed.protocol}//${parsed.host}/${owner}/${repo}`;
+}
+
+function kickLocalRunner(request: NextRequest) {
+  if (process.env.NODE_ENV === "production") return;
+  const origin = new URL(request.url).origin;
+  const secret = process.env.ANALYSIS_RUNNER_SECRET;
+  void fetch(`${origin}/api/internal/run-analysis`, {
+    method: "POST",
+    headers: secret ? { "x-analysis-runner-secret": secret } : undefined,
+  }).catch(() => {
+    // Best-effort only.
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request);
@@ -135,6 +171,8 @@ export async function POST(request: NextRequest) {
       repositoryId: repository.id,
       userId: user.userId,
     });
+
+    kickLocalRunner(request);
 
     return NextResponse.json(
       { repository, jobId: job.id, jobStatus: job.status },
