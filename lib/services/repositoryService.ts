@@ -4,6 +4,23 @@ import * as path from "path";
 import * as os from "os";
 import * as crypto from "crypto";
 import * as fs from "fs/promises";
+import { ttlCache, TTL, repoStatsCacheKey } from "../utils/ttlCache";
+
+/** Shape returned by getRepositoryStats / _fetchRepositoryStats. */
+interface RepoStats {
+  totalCommits: number;
+  totalContributors: number;
+  totalFiles: number;
+  totalBranches: number;
+  recentActivity: {
+    shortHash: string;
+    message: string;
+    authorName: string;
+    committedAt: Date;
+  }[];
+  status: string;
+  lastAnalyzedAt: Date | null;
+}
 
 export interface AnalyzeRepositoryInput {
   name: string;
@@ -483,6 +500,9 @@ export class RepositoryService {
         },
       });
 
+      // Invalidate cached stats — analysis has changed commits, files, contributors, etc.
+      ttlCache.deleteByPrefix(`repo-stats:${repositoryId}:`);
+
       await report({ progressPercent: 100, progressMessage: "Completed" });
 
       console.log(`Repository ${repositoryId} analysis completed`);
@@ -492,6 +512,8 @@ export class RepositoryService {
         where: { id: repositoryId },
         data: { status: "failed" },
       });
+      // Invalidate cached stats — status has changed to "failed".
+      ttlCache.deleteByPrefix(`repo-stats:${repositoryId}:`);
       await report({ progressMessage: "Failed" });
       throw error;
     } finally {
@@ -580,13 +602,38 @@ export class RepositoryService {
       where: { id },
     });
 
+    // Invalidate cached stats — repository no longer exists.
+    ttlCache.deleteByPrefix(`repo-stats:${id}:`);
+
     return { success: true };
   }
 
   /**
    * Get repository statistics
+   *
+   * Results are cached in-process for TTL.REPO_STATS (5 minutes) to avoid
+   * repeated DB round-trips for the same repo. The cache is invalidated
+   * automatically when analysis completes, fails, or the repo is deleted.
    */
   async getRepositoryStats(id: number, userId: number) {
+    const cacheKey = repoStatsCacheKey(id, userId);
+
+    // Return cached result if still fresh.
+    const cached = ttlCache.get<RepoStats>(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const stats = await this._fetchRepositoryStats(id, userId);
+
+    // Populate cache.
+    ttlCache.set(cacheKey, stats, TTL.REPO_STATS);
+
+    return stats;
+  }
+
+  /** Raw DB fetch for repository stats — called by getRepositoryStats. */
+  private async _fetchRepositoryStats(id: number, userId: number): Promise<RepoStats> {
     const repository = await prisma.repository.findFirst({
       where: { id, userId },
     });
