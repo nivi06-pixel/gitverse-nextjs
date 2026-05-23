@@ -153,6 +153,13 @@ model VerificationToken {
   @@map("verification_tokens")
 }
 
+enum RepositoryStatus {
+  pending
+  analyzing
+  completed
+  failed
+}
+
 model Repository {
   id             Int           @id @default(autoincrement())
   name           String
@@ -167,7 +174,7 @@ model Repository {
   forks          Int           @default(0)
   size           Int           @default(0) // Size in bytes
   lastAnalyzedAt DateTime?     @map("last_analyzed_at")
-  status         String        @default("pending") // pending, analyzing, completed, failed
+  status         RepositoryStatus @default(pending)
   userId         Int           @map("user_id")
   user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt      DateTime      @default(now()) @map("created_at")
