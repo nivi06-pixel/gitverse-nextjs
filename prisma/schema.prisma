@@ -178,7 +178,7 @@ model Repository {
   contributors   Contributor[]
   languages      Language[]
   analysisJobs   AnalysisJob[]
-
+  @@index([status])
   @@map("repositories")
 }
 
