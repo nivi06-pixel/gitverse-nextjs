@@ -260,7 +260,9 @@ export class RepositoryService {
           ? await prisma.commit.findMany({
               where: {
                 repositoryId,
-                hash: { in: commits.map((c) => c.hash) },
+                hash: {
+                  in: commits.map((commit: { hash: string }) => commit.hash),
+                },
               },
               select: { hash: true },
             })
@@ -269,7 +271,7 @@ export class RepositoryService {
 
       // Filter out commits that already exist
       const newCommits = commits.filter(
-        (commit) => !existingHashes.has(commit.hash),
+        (commit: { hash: string }) => !existingHashes.has(commit.hash),
       );
 
       console.log(
