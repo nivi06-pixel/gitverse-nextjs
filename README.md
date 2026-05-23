@@ -282,23 +282,26 @@ firebase deploy
 
 ## 📝 Environment Variables
 
-Required:
+> 💡 For a full Vercel deployment checklist, see the [Vercel Deployment section](#-deployment) above.
 
-- `DATABASE_URL` - PostgreSQL connection string
-- `JWT_SECRET` - JWT secret key
-- `GEMINI_API_KEY` - Google Gemini API key
-
-OAuth (Google / NextAuth):
-
-- `NEXTAUTH_URL` - Deployed base URL (e.g. `https://<your-domain>`)
-- `NEXTAUTH_SECRET` - Session/JWT signing secret (generate with `openssl rand -base64 32`)
-- `GOOGLE_CLIENT_ID` - Google OAuth client id
-- `GOOGLE_CLIENT_SECRET` - Google OAuth client secret
-
-Optional:
-
-- `NEXT_PUBLIC_API_URL` - API URL for client-side (defaults to current domain)
-
+| Variable | Required | Description |
+|---|---|---|
+| `DATABASE_URL` | ✅ Always | PostgreSQL connection string (use NeonDB pooler URL for Vercel) |
+| `JWT_SECRET` | ✅ Always | JWT signing secret key |
+| `GEMINI_API_KEY` | ✅ Always | Google Gemini API key for AI features |
+| `NEXTAUTH_URL` | ✅ Always | Deployed base URL e.g. `https://<your-domain>` |
+| `NEXTAUTH_SECRET` | ✅ Always | Session/JWT signing secret (generate with `openssl rand -base64 32`) |
+| `GOOGLE_CLIENT_ID` | ⚡ OAuth | Google OAuth client id |
+| `GOOGLE_CLIENT_SECRET` | ⚡ OAuth | Google OAuth client secret |
+| `GITHUB_APP_ID` | ⚡ PR Reviews | GitHub App ID |
+| `GITHUB_APP_PRIVATE_KEY` | ⚡ PR Reviews | GitHub App private key (PEM format) |
+| `GITHUB_WEBHOOK_SECRET` | ⚡ PR Reviews | GitHub webhook secret |
+| `ANALYSIS_RUNNER_SECRET` | ⚡ Cron | Required for scheduled analysis jobs on Vercel |
+| `GITVERSE_ANALYSIS_BACKEND` | ⚡ Cron | URL of your analysis worker backend |
+| `SMTP_HOST` | ⚡ Email | SMTP server for password reset emails |
+| `SMTP_USER` | ⚡ Email | SMTP username |
+| `SMTP_PASS` | ⚡ Email | SMTP password / app password |
+| `NEXT_PUBLIC_API_URL` | Optional | API URL for client-side (defaults to current domain) |
 ## 🤝 Contributing
 
 1. Fork the repository
