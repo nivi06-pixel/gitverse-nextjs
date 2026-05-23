@@ -53,7 +53,7 @@ export async function GET(
       },
     });
   } catch (error: any) {
-    console.error("Get repository error:", error);
+    console.error("Get repository error:", sanitizeError(error));
 
     if (isHttpError(error)) {
       return NextResponse.json(
@@ -88,7 +88,7 @@ export async function DELETE(
 
     return NextResponse.json({ message: "Repository deleted successfully" });
   } catch (error: any) {
-    console.error("Delete repository error:", error);
+    console.error("Delete repository error:", sanitizeError(error));
 
     if (isHttpError(error)) {
       return NextResponse.json(

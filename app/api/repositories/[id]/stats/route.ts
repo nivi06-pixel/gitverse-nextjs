@@ -32,7 +32,7 @@ export async function GET(
       },
     });
   } catch (error: any) {
-    console.error("Get repository stats error:", error);
+    console.error("Get repository stats error:", sanitizeError(error));
     return NextResponse.json(
       { error: "Failed to get repository statistics" },
       { status: 500 }

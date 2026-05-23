@@ -44,7 +44,7 @@ function kickProductionWorker() {
   if (process.env.NODE_ENV !== "production") return;
 
   void triggerAnalysisWorkerWorkflow().catch((error) => {
-    console.error("Failed to dispatch analysis worker workflow:", error);
+    console.error("Failed to dispatch analysis worker workflow:", sanitizeError(error));
   });
 }
 
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error: any) {
-    console.error("Create repository error:", error);
+    console.error("Create repository error:", sanitizeError(error));
     console.error("Error stack:", error.stack);
     if (isHttpError(error)) {
       return NextResponse.json(
@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error: any) {
-    console.error("List repositories error:", error);
+    console.error("List repositories error:", sanitizeError(error));
     if (isHttpError(error)) {
       return NextResponse.json(
         { error: error.message },

@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error: any) {
-    console.error("Fetch sessions error:", error);
+    console.error("Fetch sessions error:", sanitizeError(error));
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

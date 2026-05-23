@@ -26,7 +26,7 @@ export async function GET(
       },
     });
   } catch (error: any) {
-    console.error("GET /analysis/:jobId error:", error);
+    console.error("GET /analysis/:jobId error:", sanitizeError(error));
     return NextResponse.json({ error: "Failed to fetch job" }, { status: 500 });
   }
 }

@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error: any) {
-    console.error("Error fetching user:", error);
+    console.error("Error fetching user:", sanitizeError(error));
     return NextResponse.json(
       { message: "Failed to fetch user" },
       { status: 500 }
@@ -61,7 +61,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ message: "Account deleted" });
   } catch (error: any) {
-    console.error("Error deleting account:", error);
+    console.error("Error deleting account:", sanitizeError(error));
     if (error?.code === "P2025") {
       return NextResponse.json({ message: "User not found" }, { status: 404 });
     }
