@@ -2,7 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { User, Lock, Shield, Trash2, AlertCircle } from "lucide-react";
 import { Save } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -56,7 +56,7 @@ export default function Settings() {
     "loading" | "success" | "error" | "empty"
   >("loading");
 
-  const fetchUserInfo = async () => {
+  const fetchUserInfo = useCallback(async () => {
     setUserFetchStatus("loading");
     try {
       const token = localStorage.getItem("gitverse_token");
@@ -79,12 +79,12 @@ export default function Settings() {
       setIsGoogleLinked(null);
       setUserFetchStatus("error");
     }
-  };
+  }, []);
 
   useEffect(() => {
+    if (authLoading) return;
     fetchUserInfo();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authLoading, fetchUserInfo]);
 
   useEffect(() => {
   return () => {
