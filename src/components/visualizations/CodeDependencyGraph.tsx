@@ -1,8 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as d3 from "d3";
 import { Card, EmptyState } from "@/components/ui";
 import { Network } from "lucide-react";
 import { GraphAnalyzer } from "@/utils/graphAnalyzer";
+import { ModuleSummaryPanel } from "./ModuleSummaryPanel";
+import { AISettingsModal } from "@/components/settings/AISettingsModal";
 
 
 
@@ -13,6 +15,9 @@ interface CodeDependencyGraphProps {
 export function CodeDependencyGraph({ repository }: CodeDependencyGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
+  
+  const [selectedNode, setSelectedNode] = useState<any>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const graphAnalyzer = new GraphAnalyzer();
   const graphData = graphAnalyzer.buildDependencyGraph(repository?.files || []);
@@ -98,10 +103,14 @@ export function CodeDependencyGraph({ repository }: CodeDependencyGraphProps) {
             d.fx = event.x;
             d.fy = event.y;
           })
-          .on("end", (event: any, d: any) => {
-            if (!event.active) simulation.alphaTarget(0);
+          .on("end", (_event: any, d: any) => {
+            if (!d.active) simulation.alphaTarget(0);
             d.fx = null;
             d.fy = null;
+          })
+          .on("click", (_event: any, d: any) => {
+             // Let user click a node to view its AI summary
+             setSelectedNode(d);
           })
       );
 
@@ -230,7 +239,8 @@ export function CodeDependencyGraph({ repository }: CodeDependencyGraphProps) {
   }, [repository]);
 
   return (
-    <Card className="glass p-4 sm:p-6">
+    <div className="relative">
+    <Card className="glass p-4 sm:p-6 overflow-hidden">
       <div className="mb-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
           <h3 className="text-base sm:text-lg font-semibold">
@@ -300,5 +310,22 @@ export function CodeDependencyGraph({ repository }: CodeDependencyGraphProps) {
 />
 
     </Card>
+
+    {selectedNode && (
+      <ModuleSummaryPanel
+        nodeId={selectedNode.id}
+        nodeName={selectedNode.name}
+        nodeType={selectedNode.type}
+        repositoryFiles={repository?.files || []}
+        onClose={() => setSelectedNode(null)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+      />
+    )}
+
+    <AISettingsModal 
+      isOpen={isSettingsOpen} 
+      onClose={() => setIsSettingsOpen(false)} 
+    />
+    </div>
   );
 }
