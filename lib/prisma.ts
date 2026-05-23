@@ -69,7 +69,7 @@ function createPrismaClient(): PrismaClient {
     connectionTimeoutMillis: normalizedConnectionTimeoutMs,
     idleTimeoutMillis: process.env.NODE_ENV === "production" ? 30000 : 10000,
     max: normalizedPoolMax,
-    min: 0,
+    min: 1,
   });
 
   pool.on("error", (err) => {
