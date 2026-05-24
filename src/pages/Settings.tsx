@@ -378,6 +378,7 @@ export default function Settings() {
                       <Input
                         id="name"
                         type="text"
+                        autoComplete="name"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="John Doe"
@@ -391,6 +392,7 @@ export default function Settings() {
                       <Input
                         id="email"
                         type="email"
+                        autoComplete="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="john@example.com"
@@ -417,6 +419,7 @@ export default function Settings() {
                           <Input
                             id="email-change-password"
                             type="password"
+                            autoComplete="new-password"
                             value={emailChangeNewPassword}
                             onChange={(e) =>
                               setEmailChangeNewPassword(e.target.value)
@@ -513,6 +516,7 @@ export default function Settings() {
                           id="current-password"
                           type="password"
                           value={currentPassword}
+                          autoComplete="current-password"
                           onChange={(e) => setCurrentPassword(e.target.value)}
                           className="pl-10"
                           placeholder="••••••••"
@@ -532,6 +536,7 @@ export default function Settings() {
                         <Input
                           id="new-password"
                           type="password"
+                          autoComplete="new-password"
                           value={newPassword}
                           onChange={(e) => setNewPassword(e.target.value)}
                           className="pl-10"
@@ -555,6 +560,7 @@ export default function Settings() {
                         <Input
                           id="confirm-password"
                           type="password"
+                          autoComplete="new-password"
                           value={confirmPassword}
                           onChange={(e) => setConfirmPassword(e.target.value)}
                           className="pl-10"
