@@ -115,8 +115,12 @@ export async function POST(request: NextRequest) {
     );
   } catch (error: any) {
     const rawIp = getClientIp(request);
-    const hashedIp = crypto.createHash("sha256").update(rawIp).digest("hex").substring(0, 16);
-    logger.error({ err: sanitizeError(error), ip: hashedIp }, "Signup error");
+    let ipFingerprint = "unknown";
+    if (rawIp !== "unknown") {
+      const secret = process.env.NEXTAUTH_SECRET || "fallback_secret";
+      ipFingerprint = crypto.createHmac("sha256", secret).update(rawIp).digest("hex").substring(0, 16);
+    }
+    logger.error({ err: sanitizeError(error), ipFingerprint }, "Signup error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
