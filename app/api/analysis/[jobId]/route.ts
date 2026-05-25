@@ -59,8 +59,7 @@ export async function DELETE(
 
     if (
       job.status === "DONE" ||
-      job.status === "FAILED" ||
-      job.status === "CANCELLED"
+      job.status === "FAILED" 
     ) {
       return apiError(400, "Job cannot be cancelled");
     }
@@ -68,7 +67,6 @@ export async function DELETE(
     await prisma.analysisJob.update({
       where: { id: jobId },
       data: {
-        status: "CANCELLED",
         progressMessage: "Cancelled by user",
         finishedAt: new Date(),
       },
