@@ -24,13 +24,8 @@ export async function GET(
 
     return NextResponse.json({ job });
   } catch (error: any) {
-<<<<<<< HEAD
-    console.error("GET /analysis/:jobId error:", sanitizeError(error));
-    return NextResponse.json({ error: "Failed to fetch job" }, { status: 500 });
-=======
-    console.error("GET /analysis/:jobId error:", error); 
-    return apiError(500, "Failed to fetch job");
->>>>>>> e7515cb (feat(worker): add analysis job cancellation)
+    console.error("GET /analysis/:jobId error:", error);
+return apiError(500, "Failed to fetch job");
   }
 }
 

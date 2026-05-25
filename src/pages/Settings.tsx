@@ -341,7 +341,6 @@ export default function Settings() {
     { id: "danger", label: "Danger Zone", icon: Trash2 },
   ];
 
-  const [activeTab, setActiveTab] = useState("profile");
 
   // Early returns for loading / error / empty states to prevent layout shift
   if (userFetchStatus === "loading" || authLoading) {
