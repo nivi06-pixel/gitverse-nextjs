@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isHttpError, requireAuth } from "@/lib/middleware";
 import { repositoryService } from "@/lib/services/repositoryService";
 import { analysisJobService } from "@/lib/services/analysisJobService";
-
+import prisma from "@/lib/prisma";
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -27,6 +27,29 @@ export async function POST(
         { status: 404 }
       );
     }
+    const maxConcurrentJobs = Number(
+  process.env.MAX_CONCURRENT_ANALYSIS_PER_USER || 3
+);
+
+const activeJobsCount = await prisma.analysisJob.count({
+  where: {
+    userId: user.userId,
+    status: {
+      in: ["QUEUED", "PROCESSING"],
+    },
+  },
+});
+
+if (activeJobsCount >= maxConcurrentJobs) {
+  return NextResponse.json(
+    {
+      error:
+        "Too many sync/analyze jobs running. Please wait before retrying.",
+      retryAfter: 60,
+    },
+    { status: 429 }
+  );
+}
 
     const job = await analysisJobService.createRepositoryAnalysisJob({
       repositoryId: id,
