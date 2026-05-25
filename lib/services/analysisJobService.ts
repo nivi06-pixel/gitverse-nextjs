@@ -189,7 +189,7 @@ export class AnalysisJobService {
         SELECT id
         FROM analysis_jobs
         WHERE next_run_at <= NOW()
-          AND status IN ('QUEUED', 'PROCESSING')
+         AND status = 'QUEUED'
           AND (lock_expires_at IS NULL OR lock_expires_at < NOW())
         ORDER BY created_at ASC
         LIMIT 1
