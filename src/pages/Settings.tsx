@@ -28,6 +28,7 @@ export default function Settings() {
   const [isLoading, setIsLoading] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const didInitProfileForm = useRef(false);
@@ -300,6 +301,7 @@ export default function Settings() {
   };
 
   const handleDeleteAccount = () => {
+    setDeletePassword("");
     setShowDeleteModal(true);
   };
 
@@ -312,6 +314,7 @@ export default function Settings() {
       await axios.delete(buildApiUrl("/api/users/me"), {
         withCredentials: true,
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        data: { password: deletePassword },
       });
 
       await logout();
@@ -697,18 +700,30 @@ export default function Settings() {
       </div>
       <Modal
         isOpen={showDeleteModal}
-        onClose={() => setShowDeleteModal(false)}
+        onClose={() => { setShowDeleteModal(false); setDeletePassword(""); }}
         title="Delete Account"
         size="sm"
       >
-        <p className="text-muted-foreground mb-6">
+        <p className="text-muted-foreground mb-4">
           This permanently deletes your account and all data. This cannot be undone.
         </p>
+
+        <p className="text-sm text-muted-foreground mb-4">
+          Enter your password to confirm.
+        </p>
+
+        <Input
+          type="password"
+          placeholder="Password"
+          value={deletePassword}
+          onChange={(e) => setDeletePassword(e.target.value)}
+          className="mb-6"
+        />
 
         <div className="flex gap-3 justify-end">
           <Button
             variant="outline"
-            onClick={() => setShowDeleteModal(false)}
+            onClick={() => { setShowDeleteModal(false); setDeletePassword(""); }}
           >
             Cancel
           </Button>
@@ -719,7 +734,7 @@ export default function Settings() {
               setShowDeleteModal(false);
               confirmDeleteAccount();
             }}
-            disabled={isDeletingAccount}
+            disabled={isDeletingAccount || !deletePassword}
           >
             {isDeletingAccount ? "Deleting..." : "Delete Account"}
           </Button>

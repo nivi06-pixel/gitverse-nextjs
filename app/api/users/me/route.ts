@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import bcrypt from "bcryptjs";
 import prisma from "@/lib/prisma";
 import { requireAuth , sanitizeError } from "@/lib/middleware";
 
@@ -50,6 +51,33 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const user = await requireAuth(request);
+    const { password } = await request.json();
+
+    const fullUser = await prisma.user.findUnique({
+      where: { id: user.userId },
+      select: { passwordHash: true },
+    });
+
+    if (!fullUser) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    if (fullUser.passwordHash) {
+      if (!password) {
+        return NextResponse.json(
+          { error: "Password is required to delete your account" },
+          { status: 400 }
+        );
+      }
+
+      const isValid = await bcrypt.compare(password, fullUser.passwordHash);
+      if (!isValid) {
+        return NextResponse.json(
+          { error: "Incorrect password" },
+          { status: 401 }
+        );
+      }
+    }
 
     // Delete related GitHub repositories
 await prisma.gitHubRepo.deleteMany({
