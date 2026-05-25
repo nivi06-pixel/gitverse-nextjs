@@ -464,33 +464,7 @@ export default function RepositoryAnalysis() {
   </div>
 ) : error && !repository ? (
 
-                  <h2 className="text-xl font-semibold mb-2">
-                    Analyzing Repository
-                  </h2>
-                  <p className="text-muted-foreground">
-                    We&apos;re analyzing the repository structure, commits,
-                    contributors, and more.
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {job?.progressPercent != null && job?.progressPercent >= 0
-                      ? `${Math.min(Math.round(job.progressPercent), 100)}%${job?.progressMessage ? ` — ${job.progressMessage}` : ""}`
-                      : job?.progressMessage
-                        ? job.progressMessage
-                        : "This may take a few moments depending on the repository size..."}
-                  </p>
-                </div>
-                <div className="flex justify-center gap-4 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-2">
-                    <GitCommit className="h-4 w-4" />
-                    Processing commits
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4" />
-                    Finding contributors
-                  </div>
-                </div>
-              </div>
-            ) : error && !repository ? (
+              
               <div className="glass rounded-lg p-12 text-center space-y-4 animate-fade-in-up">
                 <div className="flex justify-center">
                   <XCircle className="h-12 w-12 text-red-500" />
