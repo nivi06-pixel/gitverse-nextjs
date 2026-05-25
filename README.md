@@ -155,6 +155,18 @@ All API routes are available under `/api`:
 - `/api/users/profile` - User profile management
 - `/api/integrations/*` - Git platform integrations
 
+## Job Locking Strategy
+
+Analysis jobs use atomic row claiming with PostgreSQL locking.
+
+Workers claim jobs using:
+
+- `FOR UPDATE SKIP LOCKED`
+- lock expiration timestamps
+- worker ownership tracking
+
+This prevents multiple workers from processing the same job concurrently.
+
 ## 🚀 Deployment
 
 ### Vercel (Recommended)
