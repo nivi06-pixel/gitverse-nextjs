@@ -332,3 +332,12 @@ model Language {
   @@unique([repositoryId, name])
   @@map("languages")
 }
+
+model WebhookEvent {
+  id         Int      @id @default(autoincrement())
+  deliveryId String   @unique
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([expiresAt])
+}
