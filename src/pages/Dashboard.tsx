@@ -24,10 +24,12 @@ import {
   Button,
   Input,
   EmptyState,
+  Skeleton,
 } from "@/components/ui";
 import { useAuth } from "@/contexts/AuthContext";
 import { buildApiUrl } from "@/services/apiConfig";
 import axios from "axios";
+import { toast } from "@/hooks/use-toast";
 
 interface Repository {
   id: string;
@@ -48,6 +50,8 @@ export default function Dashboard() {
   const { user } = useAuth();
   const router = useRouter();
   const [repoUrl, setRepoUrl] = useState("");
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const [targetDirectory, setTargetDirectory] = useState("");
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
@@ -145,7 +149,7 @@ export default function Dashboard() {
         }))
     : [];
 
-  const handleAnalyze = async () => {
+    const handleAnalyze = async () => {
     if (!repoUrl.trim()) return;
 
     setAnalyzing(true);
@@ -162,6 +166,7 @@ export default function Dashboard() {
           name: repoName,
           url: repoUrl.trim(),
           description: `Repository from ${repoUrl}`,
+          targetDirectory: targetDirectory.trim() || undefined,
         },
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -185,9 +190,15 @@ export default function Dashboard() {
       }
 
       setRepoUrl("");
+      setTargetDirectory("");
     } catch (error: any) {
       console.error("Error creating repository:", error);
-      alert(error.response?.data?.error || "Failed to analyze repository");
+      const errMsg = error.response?.data?.error || error.response?.data?.message || error.message || "Failed to analyze repository";
+      toast({
+        title: "Analysis Failed",
+        description: errMsg,
+        variant: "destructive",
+      });
     } finally {
       setAnalyzing(false);
     }
@@ -216,7 +227,7 @@ export default function Dashboard() {
                 value={repoUrl}
                 onChange={(e) => setRepoUrl(e.target.value)}
                 className="flex-1 bg-background/50"
-                onKeyPress={(e) => e.key === "Enter" && handleAnalyze()}
+                onKeyDown={(e) => e.key === "Enter" && handleAnalyze()}
               />
               <Button
                 onClick={handleAnalyze}
@@ -227,6 +238,31 @@ export default function Dashboard() {
                 {analyzing ? "Analyzing..." : "Analyze Repository"}
               </Button>
             </div>
+            <div className="mt-3 flex items-center justify-between">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="px-0 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setShowAdvancedOptions((v) => !v)}
+              >
+                {showAdvancedOptions ? "Hide advanced options" : "Advanced options"}
+              </Button>
+            </div>
+            {showAdvancedOptions ? (
+              <div className="mt-3 space-y-2">
+                <Input
+                  type="text"
+                  placeholder="Target directory (optional) e.g. packages/ui or apps/web"
+                  value={targetDirectory}
+                  onChange={(e) => setTargetDirectory(e.target.value)}
+                  className="bg-background/50"
+                />
+                <p className="text-xs text-muted-foreground">
+                  If set, GitVerse will scope file scanning, visualization, and AI context to this sub-directory.
+                </p>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -244,13 +280,23 @@ export default function Dashboard() {
                     <p className="text-xs text-muted-foreground mb-1 truncate">
                       {stat.label}
                     </p>
-                    <p className="text-2xl sm:text-3xl font-heading font-bold break-words">
-                      {stat.value}
-                    </p>
-                    <p className="text-xs text-accent mt-1 flex items-center gap-1 flex-wrap">
-                      <TrendingUp className="h-3 w-3 flex-shrink-0" />
-                      <span className="truncate">{stat.change}</span>
-                    </p>
+                    {loading ? (
+                      <div className="space-y-2">
+                        <Skeleton className="h-8 w-20" />
+                        <Skeleton className="h-4 w-28" />
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-2xl sm:text-3xl font-heading font-bold break-words">
+                        {stat.value}
+                        </p>
+
+                        <p className="text-xs text-accent mt-1 flex items-center gap-1 flex-wrap">
+                        <TrendingUp className="h-3 w-3 flex-shrink-0" />
+                        <span className="truncate">{stat.change}</span>
+                        </p>
+                      </>
+                    )}
                   </div>
                   <div className="p-2 sm:p-3 rounded-lg bg-primary/10 flex-shrink-0">
                     <stat.icon className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
@@ -287,8 +333,26 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               {loading ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  Loading repositories...
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 sm:p-4 rounded-lg border border-border/50"
+                    >
+                      <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                        <Skeleton className="h-9 w-9 rounded-lg flex-shrink-0" />
+                        <div className="space-y-2 min-w-0">
+                          <Skeleton className="h-5 w-32 sm:w-48" />
+                          <Skeleton className="h-4 w-40 sm:w-64" />
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2 sm:gap-4 mt-2 sm:mt-0">
+                        <Skeleton className="h-4 w-16" />
+                        <Skeleton className="h-4 w-12" />
+                        <Skeleton className="h-4 w-20" />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : recentRepositories.length === 0 ? (
                 <EmptyState
@@ -365,8 +429,21 @@ export default function Dashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {recentActivity.map((activity, index) => (
+              {loading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-start gap-2 sm:gap-3">
+                      <Skeleton className="mt-1 h-6 w-6 rounded-full flex-shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-4 w-full max-w-[200px]" />
+                        <Skeleton className="h-3 w-16" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {recentActivity.map((activity, index) => (
                   <div key={index} className="flex items-start gap-2 sm:gap-3">
                     <div className="mt-1 p-1.5 rounded-full bg-accent/10 flex-shrink-0">
                       <Activity className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-accent" />
@@ -385,6 +462,7 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
+              )}
             </CardContent>
           </Card>
         </div>

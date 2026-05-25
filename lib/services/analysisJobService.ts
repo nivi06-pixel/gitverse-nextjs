@@ -1,5 +1,6 @@
 import prisma from "../prisma";
 import type { AnalysisJob } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 export type JobProgressUpdate = {
   progressPercent?: number;
@@ -33,17 +34,46 @@ export class AnalysisJobService {
     userId: number;
     maxAttempts?: number;
   }): Promise<AnalysisJob> {
-    return prisma.analysisJob.create({
-      data: {
-        repositoryId: params.repositoryId,
-        userId: params.userId,
-        type: "repository_analysis",
-        status: "QUEUED",
-        progressPercent: 0,
-        progressMessage: "Queued",
-        maxAttempts: params.maxAttempts ?? 3,
-      },
-    });
+    try {
+      return await prisma.analysisJob.create({
+        data: {
+          repositoryId: params.repositoryId,
+          userId: params.userId,
+          type: "repository_analysis",
+          status: "QUEUED",
+          progressPercent: 0,
+          progressMessage: "Queued",
+          maxAttempts: params.maxAttempts ?? 3,
+        },
+      });
+    } catch (error: any) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        const existingJob = await prisma.analysisJob.findFirst({
+          where: {
+            repositoryId: params.repositoryId,
+            status: { in: ["QUEUED", "PROCESSING"] },
+          },
+        });
+        if (existingJob) return existingJob;
+
+        // The active job may have completed between the P2002 and the lookup. Retry exactly once.
+        return await prisma.analysisJob.create({
+          data: {
+            repositoryId: params.repositoryId,
+            userId: params.userId,
+            type: "repository_analysis",
+            status: "QUEUED",
+            progressPercent: 0,
+            progressMessage: "Queued",
+            maxAttempts: params.maxAttempts ?? 3,
+          },
+        });
+      }
+      throw error;
+    }
   }
 
   async getJob(params: {
@@ -185,6 +215,25 @@ export class AnalysisJobService {
     if (!claimedId) return null;
 
     return prisma.analysisJob.findUnique({ where: { id: claimedId } });
+  }
+
+  async cleanupStaleJobs(): Promise<number> {
+    const stale = await prisma.analysisJob.updateMany({
+      where: {
+        status: "PROCESSING",
+        lockExpiresAt: { lt: new Date() },
+        updatedAt: { lt: new Date(Date.now() - 60 * 60 * 1000) },
+      },
+      data: {
+        status: "FAILED",
+        error: "Job timed out - no heartbeat received",
+        finishedAt: new Date(),
+        lockedAt: null,
+        lockedBy: null,
+        lockExpiresAt: null,
+      },
+    });
+    return stale.count;
   }
 
   async heartbeat(params: {
