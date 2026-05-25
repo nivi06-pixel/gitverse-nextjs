@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { FavoriteButton } from "./FavoriteButton";
+﻿"use client";
+
 import {
   GitBranch,
   Star,
@@ -630,3 +630,4 @@ const handleToggleFavorite = async (_id: string, nextState: boolean) => {    // 
     </div>
   );
 };
+

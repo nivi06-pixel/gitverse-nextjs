@@ -33,6 +33,7 @@ export class AnalysisJobService {
     repositoryId: number;
     userId: number;
     maxAttempts?: number;
+    scope?: string;
   }): Promise<AnalysisJob> {
     const existing = await prisma.analysisJob.findFirst({
       where: {
@@ -51,6 +52,7 @@ export class AnalysisJobService {
           status: "QUEUED",
           progressPercent: 0,
           progressMessage: "Queued",
+          progressDetails: params.scope ? { scope: params.scope } : undefined,
           maxAttempts: params.maxAttempts ?? 3,
         },
       });
