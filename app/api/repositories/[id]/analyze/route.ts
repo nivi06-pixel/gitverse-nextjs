@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isHttpError, requireAuth } from "@/lib/middleware";
+import { isHttpError, requireAuth , sanitizeError } from "@/lib/middleware";
 import { repositoryService } from "@/lib/services/repositoryService";
 import { analysisJobService } from "@/lib/services/analysisJobService";
 import prisma from "@/lib/prisma";
@@ -51,9 +51,42 @@ if (activeJobsCount >= maxConcurrentJobs) {
   );
 }
 
+    const existingJob = await prisma.analysisJob.findFirst({
+  where: {
+    repositoryId: id,
+    status: {
+      in: ["QUEUED", "PROCESSING"],
+    },
+  },
+});
+
+if (existingJob) {
+  return NextResponse.json(
+    {
+      error: "Analysis already in progress",
+      jobId: existingJob.id,
+    },
+    { status: 409 }
+  );
+}
+
+    const bodyText = await request.text();
+    let scope: string | undefined = undefined;
+    if (bodyText) {
+      try {
+        const json = JSON.parse(bodyText);
+        if (json.scope && typeof json.scope === "string") {
+          scope = json.scope;
+        }
+      } catch (e) {
+        // ignore JSON parse errors
+      }
+    }
+
     const job = await analysisJobService.createRepositoryAnalysisJob({
       repositoryId: id,
       userId: user.userId,
+      scope,
     });
 
     return NextResponse.json(
@@ -61,7 +94,7 @@ if (activeJobsCount >= maxConcurrentJobs) {
       { status: 202 }
     );
   } catch (error: any) {
-    console.error("Analyze repository error:", error);
+    console.error("Analyze repository error:", sanitizeError(error));
     if (isHttpError(error)) {
       return NextResponse.json(
         { error: error.message },
