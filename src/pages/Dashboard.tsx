@@ -1,7 +1,7 @@
 "use client";
 
 export const dynamic = "force-dynamic";
-
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -50,14 +50,47 @@ export default function Dashboard() {
   const { user } = useAuth();
   const router = useRouter();
   const [repoUrl, setRepoUrl] = useState("");
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
-  const [targetDirectory, setTargetDirectory] = useState("");
+  const [repoScope, setRepoScope] = useState("");
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
     fetchRepositories();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const active = document.activeElement;
+
+      const isTyping =
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        active instanceof HTMLSelectElement ||
+        (active instanceof HTMLElement && active.isContentEditable);
+
+      if (e.key === "/" && !isTyping) {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+
+      if (
+        e.key === "/" &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        !e.shiftKey &&
+        !isTyping
+      ) {
+        setRepoUrl("");
+        setRepoScope("");
+        searchRef.current?.blur();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
   }, []);
 
   const fetchRepositories = async () => {
@@ -166,7 +199,7 @@ export default function Dashboard() {
           name: repoName,
           url: repoUrl.trim(),
           description: `Repository from ${repoUrl}`,
-          targetDirectory: targetDirectory.trim() || undefined,
+          scope: repoScope.trim() || undefined,
         },
         {
           headers: { Authorization: `Bearer ${token}` },
@@ -190,7 +223,7 @@ export default function Dashboard() {
       }
 
       setRepoUrl("");
-      setTargetDirectory("");
+      setRepoScope("");
     } catch (error: any) {
       console.error("Error creating repository:", error);
       const errMsg = error.response?.data?.error || error.response?.data?.message || error.message || "Failed to analyze repository";
@@ -203,9 +236,61 @@ export default function Dashboard() {
       setAnalyzing(false);
     }
   };
-
+if (loading) {
   return (
     <DashboardLayout>
+      <div className="space-y-6">
+        
+        {/* Welcome skeleton */}
+        <div className="space-y-2">
+          <Skeleton width="250px" height="28px" />
+          <Skeleton width="400px" height="18"/>
+        </div>
+
+        {/* Input skeleton */}
+        <div className="p-6 border rounded-lg space-y-3">
+          <Skeleton width="100%" height="40" />
+          <Skeleton width="180" height="40" />
+        </div>
+
+        {/* Stats skeleton */}
+        <div className="grid grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="p-4 border rounded-lg space-y-3">
+              <Skeleton width="60%" height="16" />
+              <Skeleton width="40%" height="28" />
+              <Skeleton width="80%" height="12" />
+            </div>
+          ))}
+        </div>
+
+        {/* Cards skeleton */}
+        <div className="grid grid-cols-3 gap-6">
+          <div className="col-span-2 space-y-3">
+            <Skeleton width="40%" height="20" />
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="p-4 border rounded-lg space-y-2">
+                <Skeleton width="30%" height="18" />
+                <Skeleton width="70%" height="14" />
+              </div>
+            ))}
+          </div>
+
+          <div className="space-y-3">
+            <Skeleton width="50%" height="20" />
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} width="100%" height="40" />
+            ))}
+          </div>
+        </div>
+
+      </div>
+    </DashboardLayout>
+  );
+}
+  return (
+    <DashboardLayout>
+    <div className="min-h-screen bg-background"></div>
       <div className="space-y-6">
         {/* Welcome Section */}
         <div>
@@ -238,31 +323,19 @@ export default function Dashboard() {
                 {analyzing ? "Analyzing..." : "Analyze Repository"}
               </Button>
             </div>
-            <div className="mt-3 flex items-center justify-between">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="px-0 text-xs text-muted-foreground hover:text-foreground"
-                onClick={() => setShowAdvancedOptions((v) => !v)}
-              >
-                {showAdvancedOptions ? "Hide advanced options" : "Advanced options"}
-              </Button>
+            <div className="flex flex-col sm:flex-row gap-3 mt-3">
+              <Input
+                type="text"
+                placeholder="Scope (e.g., packages/, src/) - Optional"
+                value={repoScope}
+                onChange={(e) => setRepoScope(e.target.value)}
+                className="flex-1 bg-background/50 max-w-sm"
+                onKeyPress={(e) => e.key === "Enter" && handleAnalyze()}
+              />
             </div>
-            {showAdvancedOptions ? (
-              <div className="mt-3 space-y-2">
-                <Input
-                  type="text"
-                  placeholder="Target directory (optional) e.g. packages/ui or apps/web"
-                  value={targetDirectory}
-                  onChange={(e) => setTargetDirectory(e.target.value)}
-                  className="bg-background/50"
-                />
-                <p className="text-xs text-muted-foreground">
-                  If set, GitVerse will scope file scanning, visualization, and AI context to this sub-directory.
-                </p>
-              </div>
-            ) : null}
+            <div className="mt-3">
+              <ShortcutHint />
+            </div>
           </CardContent>
         </Card>
 

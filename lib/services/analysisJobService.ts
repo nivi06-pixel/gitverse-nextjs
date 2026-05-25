@@ -22,7 +22,16 @@ export class AnalysisJobService {
     repositoryId: number;
     userId: number;
     maxAttempts?: number;
+    scope?: string;
   }): Promise<AnalysisJob> {
+    const existing = await prisma.analysisJob.findFirst({
+      where: {
+        repositoryId: params.repositoryId,
+        status: { in: ["QUEUED", "PROCESSING"] },
+      },
+    });
+    if (existing) return existing;
+
     try {
       return await prisma.analysisJob.create({
         data: {
@@ -32,6 +41,7 @@ export class AnalysisJobService {
           status: "QUEUED",
           progressPercent: 0,
           progressMessage: "Queued",
+          progressDetails: params.scope ? { scope: params.scope } : undefined,
           maxAttempts: params.maxAttempts ?? 3,
         },
       });
@@ -40,7 +50,7 @@ export class AnalysisJobService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
       ) {
-        const existingJob = await prisma.analysisJob.findFirst({
+        const activeJob = await prisma.analysisJob.findFirst({
           where: {
             repositoryId: params.repositoryId,
             status: { in: ["QUEUED", "PROCESSING"] },
@@ -57,6 +67,7 @@ export class AnalysisJobService {
             status: "QUEUED",
             progressPercent: 0,
             progressMessage: "Queued",
+            progressDetails: params.scope ? { scope: params.scope } : undefined,
             maxAttempts: params.maxAttempts ?? 3,
           },
         });
