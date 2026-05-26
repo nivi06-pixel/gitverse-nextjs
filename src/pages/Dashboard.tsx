@@ -306,6 +306,11 @@ const formatTimeAgo = (date: string | Date | undefined) => {
 
 const recentActivity = repositories
   .filter((r: any) => r.lastAnalyzedAt || r.createdAt)
+  .sort((a: any, b: any) => {
+    const aTime = new Date(a.lastAnalyzedAt || a.createdAt).getTime();
+    const bTime = new Date(b.lastAnalyzedAt || b.createdAt).getTime();
+    return bTime - aTime;
+  })
   .slice(0, 5)
   .map((r: any) => ({
     action: 'Analyzed',
@@ -516,7 +521,14 @@ if (loading) {
                 />
               ) : (
                 <div className="space-y-3">
-                  {repositories.map((repo: any) => (
+                  {[...repositories]
+                    .sort((a: any, b: any) => {
+                      const aTime = new Date(a.lastAnalyzedAt || a.createdAt).getTime();
+                      const bTime = new Date(b.lastAnalyzedAt || b.createdAt).getTime();
+                      return bTime - aTime;
+                    })
+                    .slice(0, 5)
+                    .map((repo: any) => (
                     <div
                       key={repo.id}
                       className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 sm:p-4 rounded-lg border border-border/50 hover:border-primary/50 transition-colors cursor-pointer glass-hover"

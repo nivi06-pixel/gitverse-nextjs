@@ -804,10 +804,17 @@ export default function Settings() {
         </div>
       </div>
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-account-title"
+          onKeyDown={(e) => e.key === "Escape" && setShowDeleteModal(false)}
+          onClick={(e) => e.target === e.currentTarget && setShowDeleteModal(false)}
+        >
           <Card className="w-full max-w-sm">
             <CardHeader>
-              <CardTitle>Delete Account</CardTitle>
+              <CardTitle id="delete-account-title">Delete Account</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground mb-6">

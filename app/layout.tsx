@@ -1,7 +1,7 @@
 import "@/lib/env";
 import { ReactNode } from "react";
 import { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Source_Sans_3 } from "next/font/google";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { NextAuthProvider } from "@/components/auth/NextAuthProvider";
@@ -10,22 +10,16 @@ import "./globals.css";
 
 const inter = Inter({
   subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "GitVerse - AI-Powered Repository Analysis",
-  description:
-    "Contributions made easy with repo visualization and AI onboarding",
-};
+const sourceSans = Source_Sans_3({
+  subsets: ["latin"],
+  variable: "--font-source-sans",
+  display: "swap",
+});
 
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  return (
-    <html lang="en">
-      <body className={inter.className}>
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://gitverse.dev";
 
 export const metadata: Metadata = {
@@ -77,7 +71,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${inter.variable} ${sourceSans.variable}`}>
       <body>
         <a
           href="#main-content"
