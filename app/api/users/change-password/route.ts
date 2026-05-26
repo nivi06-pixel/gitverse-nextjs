@@ -7,7 +7,6 @@ import { requireAuth, sanitizeError } from "@/lib/middleware";
  * Handles authenticated password changes and invalidates
  * existing sessions after a successful password update.
  */
-
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request);
@@ -33,40 +32,59 @@ export async function POST(request: NextRequest) {
     });
 
     if (!userDetails) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    const passwordHash =
-      userDetails.passwordHash || (userDetails as any).password;
-    if (passwordHash) {
-      if (!currentPassword) {
-        return NextResponse.json(
-          { error: "Current password is required" },
-          { status: 400 }
-        );
-      }
-
-      const isPasswordValid = await bcrypt.compare(
-        currentPassword,
-        passwordHash
+      return NextResponse.json(
+        { error: "User not found" },
+        { status: 404 }
       );
-
-      if (!isPasswordValid) {
-        return NextResponse.json(
-          { error: "Current password is incorrect" },
-          { status: 401 }
-        );
-      }
     }
 
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const passwordHash = userDetails.passwordHash;
+
+    if (!passwordHash) {
+      return NextResponse.json(
+        {
+          error:
+            "Cannot set password: account uses OAuth authentication",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!currentPassword) {
+      return NextResponse.json(
+        { error: "Current password is required" },
+        { status: 400 }
+      );
+    }
+
+    const isPasswordValid = await bcrypt.compare(
+      currentPassword,
+      passwordHash
+    );
+
+    if (!isPasswordValid) {
+      return NextResponse.json(
+        { error: "Current password is incorrect" },
+        { status: 401 }
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(
+      newPassword,
+      10
+    );
 
     await prisma.$transaction([
       prisma.user.update({
         where: { id: user.userId },
         data: {
           passwordHash: hashedPassword,
-          passwordChangedAt: new Date(Math.floor(Date.now() / 1000) * 1000),
+          passwordChangedAt: new Date(
+            Math.floor(Date.now() / 1000) * 1000
+          ),
+          tokenVersion: {
+            increment: 1,
+          },
         },
       }),
       prisma.session.deleteMany({
@@ -76,9 +94,15 @@ export async function POST(request: NextRequest) {
       }),
     ]);
 
-    return NextResponse.json({ message: "Password changed successfully" });
+    return NextResponse.json({
+      message: "Password changed successfully",
+    });
   } catch (error: any) {
-    console.error("Error changing password:", sanitizeError(error));
+    console.error(
+      "Error changing password:",
+      sanitizeError(error)
+    );
+
     return NextResponse.json(
       { error: "Failed to change password" },
       { status: 500 }
