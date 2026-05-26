@@ -18,6 +18,8 @@ export const Breadcrumbs: React.FC<BreadcrumbsProps> = ({ items }) => {
   const pathname = usePathname()
 
   return (
+    <nav className="flex items-center space-x-2 text-sm text-secondary">
+      
     <nav className="flex items-center space-x-2 text-sm text-muted-foreground">
       {items.map((item, index) => {
         const isLast = index === items.length - 1
