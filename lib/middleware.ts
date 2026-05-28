@@ -223,12 +223,25 @@ export function sanitizeError(error: unknown): string {
   }
 }
 
-export function badRequestResponse(
-  message: string,
-  status: number = 400
-): NextResponse {
-  return NextResponse.json(
-    { error: message },
-    { status }
-  );
+export function badRequestResponse(message: string, status: number = 400): NextResponse {
+  return NextResponse.json({ error: message }, { status });
+}
+
+export function getPrismaErrorResponse(error: any): NextResponse | null {
+  const isColdStartError =
+    error?.code === 'P1001' ||
+    error?.code === 'P2024' ||
+    error?.message?.toLowerCase().includes('timeout') ||
+    error?.message?.toLowerCase().includes('connection pool') ||
+    error?.message?.toLowerCase().includes('connect') ||
+    error?.message?.toLowerCase().includes('fetch failed');
+
+  if (isColdStartError) {
+    return NextResponse.json(
+      { error: "DATABASE_COLD_START", message: "Waking up database..." },
+      { status: 503 }
+    );
+  }
+
+  return null;
 }
