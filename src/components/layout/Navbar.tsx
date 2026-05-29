@@ -7,6 +7,11 @@ import { ThemeToggle } from '@/components/ThemeToggle'
 export const Navbar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false)
 
+  useEffect(() => {
+    const styleTag = document.getElementById("navbar-inline-css");
+    if (styleTag) styleTag.remove();
+  }, []);
+
   const navLinks = [
     { name: 'Features', href: '#features' },
     { name: 'How it Works', href: '#how-it-works' },
@@ -92,7 +97,3 @@ export const Navbar: React.FC = () => {
     </nav>
   )
 }
-useEffect(() => {
-  const styleTag = document.getElementById("navbar-inline-css");
-  if (styleTag) styleTag.remove();
-}, []);
