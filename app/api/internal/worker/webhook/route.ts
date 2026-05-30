@@ -15,6 +15,7 @@ import { ImpactAnalysisService } from "@/lib/services/impact-analysis";
 import { SelfHealingService } from "@/lib/services/self-healing";
 import { secretDetector } from "@/lib/services/secret-detector";
 import { securityAlerts } from "@/lib/services/security-alerts";
+import { TimeoutEstimatorService } from "@/lib/services/timeout-estimator";
 
 export const runtime = "nodejs";
 export const maxDuration = 300; // 5 minutes max duration for Vercel
@@ -70,6 +71,8 @@ export async function POST(request: NextRequest) {
     where: { id: eventId },
     data: { status: "processing" },
   });
+
+  const timeoutEstimator = new TimeoutEstimatorService();
 
   try {
     const payload = webhookEvent.payload as any;
@@ -258,6 +261,7 @@ export async function POST(request: NextRequest) {
         repo,
         number,
         githubToken: installationToken,
+        timeoutEstimator,
       });
 
       if (tokensConsumed) {
