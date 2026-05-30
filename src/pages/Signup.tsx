@@ -171,6 +171,7 @@ export default function Signup() {
       });
       return;
     }
+
     const passwordRegex =
           /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
     if (!passwordRegex.test(password)) {
