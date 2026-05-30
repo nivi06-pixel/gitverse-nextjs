@@ -438,6 +438,50 @@ export class GitHubService {
   }
 
   /**
+   * Post a comment on an issue
+   */
+  async postIssueComment(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    body: string,
+  ): Promise<{ id: number; html_url: string }> {
+    if (!body?.trim()) {
+      throw new Error("Comment body is required");
+    }
+
+    const response = await this.client.post(
+      `/repos/${owner}/${repo}/issues/${issueNumber}/comments`,
+      { body },
+    );
+    return response.data;
+  }
+
+  /**
+   * Get repository labels
+   */
+  async getRepoLabels(owner: string, repo: string): Promise<Array<{ name: string }>> {
+    const response = await this.client.get(`/repos/${owner}/${repo}/labels`);
+    return response.data;
+  }
+
+  /**
+   * Add labels to an issue
+   */
+  async addIssueLabels(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    labels: string[],
+  ): Promise<void> {
+    if (!labels || labels.length === 0) return;
+    await this.client.post(
+      `/repos/${owner}/${repo}/issues/${issueNumber}/labels`,
+      { labels },
+    );
+  }
+
+  /**
    * Get repository languages
    */
   async getLanguages(

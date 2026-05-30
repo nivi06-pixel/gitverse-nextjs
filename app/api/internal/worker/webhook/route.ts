@@ -10,6 +10,7 @@ import { isAxiosError } from "axios";
 import { sanitizeError } from "@/lib/middleware";
 import crypto from "crypto";
 import { QuotaService } from "@/lib/services/quotaService";
+import { IssueTriageService } from "@/lib/services/issue-triage";
 
 export const runtime = "nodejs";
 export const maxDuration = 300; // 5 minutes max duration for Vercel
@@ -70,7 +71,9 @@ export async function POST(request: NextRequest) {
     const payload = webhookEvent.payload as any;
     const owner = payload.repository?.owner?.login;
     const repo = payload.repository?.name;
-    const number = payload.pull_request?.number;
+    const pullNumber = payload.pull_request?.number;
+    const issueNumber = payload.issue?.number;
+    const number = pullNumber || issueNumber;
     const installationId = payload.installation?.id;
 
     if (!owner || !repo || !number || !installationId) {
@@ -141,6 +144,35 @@ export async function POST(request: NextRequest) {
         }
       }
       return NextResponse.json({ ok: true, ignored: true, reason: "quota_exhausted" });
+    }
+
+    if (webhookEvent.event === "issues") {
+      if (!issueNumber) throw new Error("Missing issue number");
+      const issueTitle = payload.issue?.title || "Unknown Title";
+      const issueBody = payload.issue?.body || "";
+
+      const repositoryFiles = await prisma.file.findMany({
+        where: { repositoryId: enabledRepo.id },
+        select: { path: true },
+      });
+
+      const triageService = new IssueTriageService();
+      await triageService.triageIssue({
+        owner,
+        repo,
+        issueNumber,
+        title: issueTitle,
+        body: issueBody,
+        repositoryFiles,
+        githubToken: installationToken,
+      });
+
+      await prisma.webhookEvent.update({
+        where: { id: eventId },
+        data: { status: "completed" },
+      });
+
+      return NextResponse.json({ ok: true, message: "Issue triaged" });
     }
 
     const pr = await github.getPullRequest(owner, repo, number);
