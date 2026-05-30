@@ -5,6 +5,7 @@ import { repositoryService } from "@/lib/services/repositoryService";
 import { checkAiRateLimit, logAiRequest } from "@/lib/utils/ipRateLimit";
 import { getClientIp } from "@/lib/services/rateLimitService";
 import { GitHubService } from "@/lib/services/githubService";
+import { getDecryptedGitHubToken } from "@/lib/utils/githubToken";
 import prisma from "@/lib/prisma";
 import axios from "axios";
 import {
@@ -21,11 +22,7 @@ async function fetchGitHubFileContent(url: string, filePath: string, userId: num
   if (!ownerRepo) return "";
   const { owner, repo } = ownerRepo;
 
-  const gitHubAccount = await prisma.gitHubAccount.findUnique({
-    where: { userId },
-    select: { accessToken: true },
-  });
-  const token = gitHubAccount?.accessToken;
+  const token = await getDecryptedGitHubToken(userId);
 
   try {
     const headers: Record<string, string> = {

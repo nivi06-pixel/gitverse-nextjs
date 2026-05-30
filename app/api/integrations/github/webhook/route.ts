@@ -151,8 +151,15 @@ export async function POST(request: NextRequest) {
     const baseUrl = process.env.NEXTAUTH_URL || `http://${request.headers.get("host") || "localhost:3000"}`;
     const workerUrl = `${baseUrl}/api/internal/worker/webhook`;
     
-    // Generate auth token for internal worker
-    const internalSecret = process.env.GITHUB_WEBHOOK_SECRET || process.env.JWT_SECRET || "";
+    // Generate auth token for internal worker using dedicated secret
+    const internalSecret = process.env.INTERNAL_WORKER_SECRET;
+    if (!internalSecret) {
+      console.error("[CRITICAL] INTERNAL_WORKER_SECRET not configured — cannot trigger worker");
+      return NextResponse.json(
+        { error: "Internal worker secret not configured" },
+        { status: 500 }
+      );
+    }
     const internalToken = `Bearer ${crypto.createHash('sha256').update(internalSecret).digest('hex')}`;
 
     // Non-blocking fetch
