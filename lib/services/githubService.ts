@@ -641,6 +641,37 @@ export class GitHubService {
   }
 
   /**
+   * Create a review comment on a Pull Request (useful for Suggested Changes)
+   */
+  async createPullRequestReviewComment(
+    owner: string,
+    repo: string,
+    pullNumber: number,
+    commitId: string,
+    path: string,
+    body: string,
+    line: number,
+    startLine?: number
+  ): Promise<any> {
+    const payload: any = {
+      body,
+      commit_id: commitId,
+      path,
+      line,
+    };
+    if (startLine && startLine < line) {
+      payload.start_line = startLine;
+      payload.start_side = "RIGHT";
+    }
+
+    const response = await this.client.post(
+      `/repos/${owner}/${repo}/pulls/${pullNumber}/comments`,
+      payload
+    );
+    return response.data;
+  }
+
+  /**
    * Validate GitHub token
    */
   async validateToken(): Promise<boolean> {

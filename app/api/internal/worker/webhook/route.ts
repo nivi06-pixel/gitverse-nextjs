@@ -12,6 +12,7 @@ import crypto from "crypto";
 import { QuotaService } from "@/lib/services/quotaService";
 import { IssueTriageService } from "@/lib/services/issue-triage";
 import { ImpactAnalysisService } from "@/lib/services/impact-analysis";
+import { SelfHealingService } from "@/lib/services/self-healing";
 
 export const runtime = "nodejs";
 export const maxDuration = 300; // 5 minutes max duration for Vercel
@@ -291,6 +292,21 @@ export async function POST(request: NextRequest) {
         });
       } catch (impactErr) {
         console.error("Dependency impact analysis failed:", impactErr);
+      }
+
+      // Execute self-healing patches
+      try {
+        const selfHealingService = new SelfHealingService();
+        await selfHealingService.processAndPostPatches({
+          owner,
+          repo,
+          pullNumber: number,
+          headSha,
+          githubToken: installationToken,
+          reviewResponse: review,
+        });
+      } catch (selfHealErr) {
+        console.error("Self-healing patch generation failed:", selfHealErr);
       }
 
       await prisma.webhookEvent.update({
