@@ -11,6 +11,7 @@ export interface CodeAnalysisRequest {
 }
 
 export interface RepositoryContext {
+  id?: number;
   name: string;
   description?: string;
   languages: string[];
@@ -66,7 +67,11 @@ User Question: ${message}
           "Content-Type": "application/json",
           ...this.getAuthHeaders(),
         },
-        body: JSON.stringify({ prompt: enhancedMessage, messages: history }),
+        body: JSON.stringify({ 
+          repositoryId: context?.id ? Number(context.id) : undefined, 
+          prompt: enhancedMessage, 
+          messages: history 
+        }),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -133,6 +138,106 @@ User Question: ${message}
     } catch (error) {
       console.error("Code analysis error:", error);
       throw new Error("Failed to analyze code");
+    }
+  }
+
+  async analyzeRepository(repositoryId: number, type: string): Promise<{ analysis: string; isTruncated: boolean }> {
+    try {
+      const res = await fetch("/api/ai/analyze-repository", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...this.getAuthHeaders(),
+        },
+        body: JSON.stringify({ repositoryId, type }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          data?.error || data?.details || "Failed to analyze repository"
+        );
+      }
+
+      const text = data?.analysis;
+      if (typeof text !== "string") {
+        throw new Error("Invalid response from AI service");
+      }
+
+      return {
+        analysis: text,
+        isTruncated: !!data?.isTruncated,
+      };
+    } catch (error) {
+      console.error("Repository analysis error:", error);
+      throw new Error("Failed to analyze repository");
+    }
+  }
+
+  async compareRepositories(repositoryIds: number[]): Promise<string> {
+    try {
+      const res = await fetch("/api/ai/compare", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...this.getAuthHeaders(),
+        },
+        body: JSON.stringify({ repositoryIds }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          data?.error || "Failed to compare repositories"
+        );
+      }
+
+      const text = data?.comparison;
+      if (typeof text !== "string") {
+        throw new Error("Invalid response from AI service");
+      }
+
+      return text;
+    } catch (error) {
+      console.error("Repository comparison error:", error);
+      throw new Error(
+        error instanceof Error ? error.message : "Failed to compare repositories"
+      );
+    }
+  }
+
+  async simulatePullRequest(repositoryId: number | undefined, diff: string): Promise<string> {
+    try {
+      const res = await fetch("/api/ai/simulate-pr", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...this.getAuthHeaders(),
+        },
+        body: JSON.stringify({ repositoryId, diff }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          data?.error || "Failed to simulate pull request review"
+        );
+      }
+
+      const text = data?.review;
+      if (typeof text !== "string") {
+        throw new Error("Invalid response from AI service");
+      }
+
+      return text;
+    } catch (error) {
+      console.error("PR simulator error:", error);
+      throw new Error(
+        error instanceof Error ? error.message : "Failed to simulate pull request review"
+      );
     }
   }
 
