@@ -1,13 +1,12 @@
 import axios, { AxiosError, AxiosInstance, isAxiosError } from "axios";
-import { getRetryDelayMs } from "@/lib/utils/rateLimit";
+import { computeBackoffMs } from "@/lib/utils/retry";
+import { getDecryptedGitHubToken } from "@/lib/utils/githubToken";
 
 export class GitHubRateLimitError extends Error {
   retryAfterSeconds: number;
   constructor(retryAfterSeconds: number) {
     super(
-      retryAfterSeconds > 0
-        ? `GitHub API rate limit reached. Please retry after ${retryAfterSeconds} seconds.`
-        : "GitHub API rate limit reached. Please try again later.",
+      `GitHub API rate limit reached. Please retry after ${retryAfterSeconds} seconds.`,
     );
     this.name = "GitHubRateLimitError";
     this.retryAfterSeconds = retryAfterSeconds;
@@ -28,7 +27,9 @@ function sanitizeGitHubHeaders(headers: any): any {
   }
 
   const source =
-    typeof (headers as any).toJSON === "function" ? (headers as any).toJSON() : headers;
+    typeof (headers as any).toJSON === "function"
+      ? (headers as any).toJSON()
+      : headers;
 
   if (source == null || typeof source !== "object") {
     return source;
@@ -145,6 +146,81 @@ export interface GitHubPullRequestFile {
   patch?: string;
 }
 
+export async function fetchGitHubFileContent(
+  url: string,
+  filePath: string,
+  userId: number,
+): Promise<string> {
+  const ownerRepo = GitHubService.parseGitHubUrl(url);
+  if (!ownerRepo) return "";
+  const { owner, repo } = ownerRepo;
+
+  const token = await getDecryptedGitHubToken(userId);
+  const apiHeaders: Record<string, string> = {
+    Accept: "application/vnd.github.v3+json",
+    "User-Agent": "GitVerse-App",
+  };
+  if (token) {
+    apiHeaders["Authorization"] = `token ${token}`;
+  }
+
+  try {
+    const response = await axios.get(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`,
+      { headers: apiHeaders },
+    );
+
+    if (response.data && response.data.content) {
+      const encoding = response.data.encoding;
+      if (encoding === "base64") {
+        return Buffer.from(response.data.content, "base64").toString("utf-8");
+      }
+      return response.data.content;
+    }
+  } catch (error) {
+    console.warn(
+      `Failed to fetch file ${filePath} via API, trying raw fallback:`,
+      sanitizeGitHubError(error),
+    );
+  }
+
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `token ${token}`;
+  }
+
+  const fallbackBranches = ["main", "master"];
+  try {
+    const response = await axios.get(
+      `https://api.github.com/repos/${owner}/${repo}`,
+      { headers: apiHeaders },
+    );
+    const defaultBranch = response.data?.default_branch;
+    if (typeof defaultBranch === "string" && defaultBranch.length > 0) {
+      fallbackBranches.unshift(defaultBranch);
+    }
+  } catch (error) {
+    console.warn(
+      `Failed to fetch default branch for ${owner}/${repo}, using common fallbacks:`,
+      sanitizeGitHubError(error),
+    );
+  }
+
+  for (const branch of [...new Set(fallbackBranches)]) {
+    try {
+      const response = await axios.get(
+        `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${filePath}`,
+        { headers, responseType: "text" },
+      );
+      if (response.data) return response.data;
+    } catch {
+      // Continue to next branch
+    }
+  }
+
+  return "";
+}
+
 export class GitHubService {
   private client: AxiosInstance;
   private token?: string;
@@ -156,6 +232,7 @@ export class GitHubService {
       headers: {
         Accept: "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "GitVerse-App",
         ...(token && { Authorization: `Bearer ${token}` }),
       },
     });
@@ -170,51 +247,45 @@ export class GitHubService {
         const status = error.response?.status;
         const config = error.config as any;
 
-        config.retryCount = config.retryCount || 0;
-
-        const isRateLimit = status === 429 || status === 403;
-        if (isRateLimit) {
-          const rateLimitRemaining = error.response?.headers?.["x-ratelimit-remaining"];
+        if (status === 429 || status === 403) {
+          const rateLimitRemaining =
+            error.response?.headers?.["x-ratelimit-remaining"];
           if (status === 429 || rateLimitRemaining === "0") {
-            if (config.retryCount >= 3) {
-              const retryAfterHeader = error.response?.headers?.["retry-after"];
-              const resetHeader = error.response?.headers?.["x-ratelimit-reset"];
-              let retrySeconds = 60;
+            const retryAfterHeader = error.response?.headers?.["retry-after"];
+            const resetHeader = error.response?.headers?.["x-ratelimit-reset"];
+            let retrySeconds = 60;
 
-              if (retryAfterHeader) {
-                retrySeconds = parseInt(retryAfterHeader, 10);
-              } else if (resetHeader) {
-                const resetTime = parseInt(resetHeader, 10) * 1000;
-                retrySeconds = Math.max(1, Math.ceil((resetTime - Date.now()) / 1000));
-              }
-              throw new GitHubRateLimitError(retrySeconds);
+            if (retryAfterHeader) {
+              retrySeconds = parseInt(retryAfterHeader, 10);
+            } else if (resetHeader) {
+              const resetTime = parseInt(resetHeader, 10) * 1000;
+              retrySeconds = Math.max(
+                1,
+                Math.ceil((resetTime - Date.now()) / 1000),
+              );
             }
-            config.retryCount += 1;
-            const delayMs = getRetryDelayMs(error, config.retryCount) ?? 1000;
-            await new Promise((resolve) => setTimeout(resolve, delayMs));
-            return this.client(config);
+            throw new GitHubRateLimitError(retrySeconds);
           }
         }
 
-        const retryStatusCodes = [409, 502, 503, 504];
+        const retryStatusCodes = [502, 503, 504];
         if (
-          (status && retryableCodes.includes(status)) ||
+          (status && retryStatusCodes.includes(status)) ||
           error.code === "ECONNABORTED" ||
-          error.code === "ECONNRESET" ||
-          error.code === "ETIMEDOUT" ||
           !error.response
         ) {
+          config.retryCount = config.retryCount || 0;
           if (config.retryCount < 3) {
             config.retryCount += 1;
-            const backoff = Math.pow(2, config.retryCount) * 1000 + Math.random() * 1000;
-            console.log(`Retrying GitHub API request ${config.url} (attempt ${config.retryCount}) due to ${status || error.code}...`);
+            const backoff =
+              computeBackoffMs(config.retryCount - 1) + Math.random() * 1000;
             await new Promise((resolve) => setTimeout(resolve, backoff));
             return this.client(config);
           }
         }
 
         throw sanitizeGitHubError(error);
-      }
+      },
     );
   }
 
@@ -233,25 +304,9 @@ export class GitHubService {
   /**
    * Get repository information
    */
-  async getRepository(owner: string, repo: string): Promise<GitHubRepository | null> {
-    try {
-      const response = await this.client.get(`/repos/${owner}/${repo}`);
-      const data = response.data as GitHubRepository;
-      
-      // Detect renamed repositories safely
-      const expectedFullName = `${owner}/${repo}`.toLowerCase();
-      if (data.full_name && data.full_name.toLowerCase() !== expectedFullName) {
-        console.warn(`GitHub repository renamed: requested ${expectedFullName}, but received ${data.full_name}`);
-      }
-      
-      return data;
-    } catch (error) {
-      if (isAxiosError(error) && error.response?.status === 404) {
-        console.warn(`GitHub repository not found (404): ${owner}/${repo}. It may have been deleted or access was lost.`);
-        return null;
-      }
-      throw sanitizeGitHubError(error);
-    }
+  async getRepository(owner: string, repo: string): Promise<GitHubRepository> {
+    const response = await this.client.get(`/repos/${owner}/${repo}`);
+    return response.data;
   }
 
   /**
@@ -309,15 +364,8 @@ export class GitHubService {
    * Get repository branches
    */
   async getBranches(owner: string, repo: string): Promise<GitHubBranch[]> {
-    try {
-      const response = await this.client.get(`/repos/${owner}/${repo}/branches`);
-      return response.data;
-    } catch (error) {
-      if (isAxiosError(error) && error.response?.status === 404) {
-        return [];
-      }
-      throw sanitizeGitHubError(error);
-    }
+    const response = await this.client.get(`/repos/${owner}/${repo}/branches`);
+    return response.data;
   }
 
   /**
@@ -333,22 +381,16 @@ export class GitHubService {
       page?: number;
     },
   ): Promise<GitHubCommit[]> {
-    try {
-      const response = await this.client.get(`/repos/${owner}/${repo}/commits`, {
-        params: {
-          sha: params?.sha,
-          path: params?.path,
-          per_page: params?.per_page || 100,
-          page: params?.page || 1,
-        },
-      });
-      return response.data;
-    } catch (error) {
-      if (isAxiosError(error) && (error.response?.status === 404 || error.response?.status === 409)) {
-        return []; // 409 Conflict means repository is empty
-      }
-      throw sanitizeGitHubError(error);
-    }
+    const response = await this.client.get(`/repos/${owner}/${repo}/commits`, {
+      params: {
+        sha: params?.sha,
+        path: params?.path,
+        per_page: params?.per_page || 100,
+        page: params?.page || 1,
+      },
+    });
+
+    return response.data;
   }
 
   /**
@@ -358,18 +400,11 @@ export class GitHubService {
     owner: string,
     repo: string,
     sha: string,
-  ): Promise<GitHubCommit | null> {
-    try {
-      const response = await this.client.get(
-        `/repos/${owner}/${repo}/commits/${sha}`,
-      );
-      return response.data;
-    } catch (error) {
-      if (isAxiosError(error) && error.response?.status === 404) {
-        return null;
-      }
-      throw sanitizeGitHubError(error);
-    }
+  ): Promise<GitHubCommit> {
+    const response = await this.client.get(
+      `/repos/${owner}/${repo}/commits/${sha}`,
+    );
+    return response.data;
   }
 
   /**
@@ -379,18 +414,37 @@ export class GitHubService {
     owner: string,
     repo: string,
     pullNumber: number,
-  ): Promise<GitHubPullRequest | null> {
-    try {
-      const response = await this.client.get(
-        `/repos/${owner}/${repo}/pulls/${pullNumber}`,
-      );
-      return response.data;
-    } catch (error) {
-      if (isAxiosError(error) && error.response?.status === 404) {
-        return null;
-      }
-      throw sanitizeGitHubError(error);
-    }
+  ): Promise<GitHubPullRequest> {
+    const response = await this.client.get(
+      `/repos/${owner}/${repo}/pulls/${pullNumber}`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Get collaborators for a repository
+   */
+  async getCollaborators(owner: string, repo: string): Promise<Array<{ login: string; permissions: { admin: boolean; push: boolean; pull: boolean } }>> {
+    const response = await this.client.get(
+      `/repos/${owner}/${repo}/collaborators`
+    );
+    return response.data;
+  }
+
+  /**
+   * Update pull request state (e.g. to close it)
+   */
+  async updatePullRequest(
+    owner: string,
+    repo: string,
+    pullNumber: number,
+    data: { state?: "open" | "closed"; title?: string; body?: string }
+  ): Promise<GitHubPullRequest> {
+    const response = await this.client.patch(
+      `/repos/${owner}/${repo}/pulls/${pullNumber}`,
+      data
+    );
+    return response.data;
   }
 
   /**
@@ -403,34 +457,108 @@ export class GitHubService {
     params?: { per_page?: number; max_pages?: number },
   ): Promise<GitHubPullRequestFile[]> {
     const perPage = Math.min(Math.max(params?.per_page ?? 100, 1), 100);
-    const maxPages = Math.min(Math.max(params?.max_pages ?? 10, 1), 50);
+    const maxPages = Math.min(Math.max(params?.max_pages ?? 5, 1), 50);
+    const maxTotalPatchChars = 2_000_000; // Limit total patch data loaded in memory to ~2MB
 
     const all: GitHubPullRequestFile[] = [];
-    try {
-      for (let page = 1; page <= maxPages; page++) {
-        const response = await this.client.get(
-          `/repos/${owner}/${repo}/pulls/${pullNumber}/files`,
-          {
-            params: {
-              per_page: perPage,
-              page,
-            },
-          },
-        );
+    let currentPatchChars = 0;
 
-        const items: GitHubPullRequestFile[] = response.data;
-        if (!Array.isArray(items) || items.length === 0) break;
-        all.push(...items);
-        if (items.length < perPage) break;
+    for (let page = 1; page <= maxPages; page++) {
+      const response = await this.client.get(
+        `/repos/${owner}/${repo}/pulls/${pullNumber}/files`,
+        {
+          params: {
+            per_page: perPage,
+            page,
+          },
+        },
+      );
+
+      const items: GitHubPullRequestFile[] = response.data;
+      if (!Array.isArray(items) || items.length === 0) break;
+
+      for (const item of items) {
+        all.push(item);
+        if (item.patch) {
+          currentPatchChars += item.patch.length;
+        }
       }
-    } catch (error) {
-      if (isAxiosError(error) && error.response?.status === 404) {
-        return all; // Return what we have (likely empty) if 404 occurs
+
+      if (items.length < perPage) break;
+      if (currentPatchChars >= maxTotalPatchChars) {
+        console.warn(
+          `[getPullRequestFiles] Halting pagination early: patch size limit exceeded (${currentPatchChars} chars)`,
+        );
+        break;
       }
-      throw sanitizeGitHubError(error);
     }
 
     return all;
+  }
+
+  /**
+   * Create a new GitHub Check Run
+   */
+  async createCheckRun(
+    owner: string,
+    repo: string,
+    name: string,
+    head_sha: string,
+    status: "queued" | "in_progress" | "completed" = "in_progress",
+  ): Promise<{ id: number; status: string }> {
+    try {
+      const response = await this.client.post(
+        `/repos/${owner}/${repo}/check-runs`,
+        {
+          name,
+          head_sha,
+          status,
+          started_at: new Date().toISOString(),
+        },
+      );
+      return response.data;
+    } catch (error) {
+      throw sanitizeGitHubError(error);
+    }
+  }
+
+  /**
+   * Update an existing GitHub Check Run
+   */
+  async updateCheckRun(
+    owner: string,
+    repo: string,
+    check_run_id: number,
+    status: "queued" | "in_progress" | "completed",
+    conclusion?:
+      | "success"
+      | "failure"
+      | "neutral"
+      | "cancelled"
+      | "timed_out"
+      | "action_required"
+      | "skipped",
+    output?: {
+      title: string;
+      summary: string;
+      text?: string;
+    },
+  ): Promise<any> {
+    try {
+      const payload: any = { status };
+      if (conclusion) payload.conclusion = conclusion;
+      if (output) payload.output = output;
+      if (status === "completed")
+        payload.completed_at = new Date().toISOString();
+
+      const response = await this.client.patch(
+        `/repos/${owner}/${repo}/check-runs/${check_run_id}`,
+        payload,
+      );
+      return response.data;
+    } catch (error) {
+      throw sanitizeGitHubError(error);
+    }
   }
 
   /**
@@ -489,21 +617,91 @@ export class GitHubService {
   }
 
   /**
+   * Get comments on a pull request (PR comments are issue comments in GitHub API)
+   */
+  async getPullRequestComments(
+    owner: string,
+    repo: string,
+    pullNumber: number,
+  ): Promise<any[]> {
+    const response = await this.client.get(
+      `/repos/${owner}/${repo}/issues/${pullNumber}/comments`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Update a comment on a pull request
+   */
+  async updatePullRequestComment(
+    owner: string,
+    repo: string,
+    commentId: number,
+    body: string,
+  ): Promise<any> {
+    const response = await this.client.patch(
+      `/repos/${owner}/${repo}/issues/comments/${commentId}`,
+      { body },
+    );
+    return response.data;
+  }
+
+  /**
+   * Post a comment on an issue
+   */
+  async postIssueComment(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    body: string,
+  ): Promise<{ id: number; html_url: string }> {
+    if (!body?.trim()) {
+      throw new Error("Comment body is required");
+    }
+
+    const response = await this.client.post(
+      `/repos/${owner}/${repo}/issues/${issueNumber}/comments`,
+      { body },
+    );
+    return response.data;
+  }
+
+  /**
+   * Get repository labels
+   */
+  async getRepoLabels(
+    owner: string,
+    repo: string,
+  ): Promise<Array<{ name: string }>> {
+    const response = await this.client.get(`/repos/${owner}/${repo}/labels`);
+    return response.data;
+  }
+
+  /**
+   * Add labels to an issue
+   */
+  async addIssueLabels(
+    owner: string,
+    repo: string,
+    issueNumber: number,
+    labels: string[],
+  ): Promise<void> {
+    if (!labels || labels.length === 0) return;
+    await this.client.post(
+      `/repos/${owner}/${repo}/issues/${issueNumber}/labels`,
+      { labels },
+    );
+  }
+
+  /**
    * Get repository languages
    */
   async getLanguages(
     owner: string,
     repo: string,
   ): Promise<Record<string, number>> {
-    try {
-      const response = await this.client.get(`/repos/${owner}/${repo}/languages`);
-      return response.data;
-    } catch (error) {
-      if (isAxiosError(error) && error.response?.status === 404) {
-        return {};
-      }
-      throw sanitizeGitHubError(error);
-    }
+    const response = await this.client.get(`/repos/${owner}/${repo}/languages`);
+    return response.data;
   }
 
   /**
@@ -519,17 +717,112 @@ export class GitHubService {
       avatar_url: string;
     }>
   > {
+    const response = await this.client.get(
+      `/repos/${owner}/${repo}/contributors`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Fetch file content from repository
+   */
+  async getFileContent(
+    owner: string,
+    repo: string,
+    path: string,
+    ref?: string,
+  ): Promise<string | null> {
     try {
-      const response = await this.client.get(
-        `/repos/${owner}/${repo}/contributors`,
-      );
-      return response.data;
-    } catch (error) {
-      if (isAxiosError(error) && error.response?.status === 404) {
-        return [];
+      const url = ref
+        ? `/repos/${owner}/${repo}/contents/${path}?ref=${ref}`
+        : `/repos/${owner}/${repo}/contents/${path}`;
+      const response = await this.client.get(url);
+      if (response.data && response.data.content) {
+        return Buffer.from(response.data.content, "base64").toString("utf-8");
       }
-      throw sanitizeGitHubError(error);
+      return null;
+    } catch (error: any) {
+      if (error.response && error.response.status === 404) {
+        return null;
+      }
+      throw error;
     }
+  }
+
+  /**
+   * Create a new branch
+   */
+  async createBranch(
+    owner: string,
+    repo: string,
+    branch: string,
+    sha: string,
+  ): Promise<any> {
+    const response = await this.client.post(
+      `/repos/${owner}/${repo}/git/refs`,
+      {
+        ref: `refs/heads/${branch}`,
+        sha,
+      },
+    );
+    return response.data;
+  }
+
+  /**
+   * Create a new commit with a single file change
+   */
+  async createCommit(
+    owner: string,
+    repo: string,
+    path: string,
+    message: string,
+    content: string,
+    branch: string,
+    sha: string,
+  ): Promise<any> {
+    // 1. Get current file (to get its blob SHA)
+    let fileSha: string | undefined;
+    try {
+      const fileRes = await this.client.get(
+        `/repos/${owner}/${repo}/contents/${path}?ref=${branch}`,
+      );
+      fileSha = fileRes.data.sha;
+    } catch (e: any) {
+      // If file doesn't exist yet, fileSha is undefined
+    }
+
+    // 2. Update file
+    const response = await this.client.put(
+      `/repos/${owner}/${repo}/contents/${path}`,
+      {
+        message,
+        content: Buffer.from(content).toString("base64"),
+        branch,
+        sha: fileSha,
+      },
+    );
+
+    return response.data;
+  }
+
+  /**
+   * Create a Pull Request
+   */
+  async createPullRequest(
+    owner: string,
+    repo: string,
+    title: string,
+    body: string,
+    head: string,
+    base: string,
+  ): Promise<any> {
+    const response = await this.client.post(`/repos/${owner}/${repo}/pulls`, {
+      title,
+      body,
+      head,
+      base,
+    });
+    return response.data;
   }
 
   /**
@@ -577,6 +870,37 @@ export class GitHubService {
     }
 
     return null;
+  }
+
+  /**
+   * Create a review comment on a Pull Request (useful for Suggested Changes)
+   */
+  async createPullRequestReviewComment(
+    owner: string,
+    repo: string,
+    pullNumber: number,
+    commitId: string,
+    path: string,
+    body: string,
+    line: number,
+    startLine?: number,
+  ): Promise<any> {
+    const payload: any = {
+      body,
+      commit_id: commitId,
+      path,
+      line,
+    };
+    if (startLine && startLine < line) {
+      payload.start_line = startLine;
+      payload.start_side = "RIGHT";
+    }
+
+    const response = await this.client.post(
+      `/repos/${owner}/${repo}/pulls/${pullNumber}/comments`,
+      payload,
+    );
+    return response.data;
   }
 
   /**
