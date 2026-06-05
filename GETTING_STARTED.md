@@ -8,6 +8,13 @@ This is the Next.js version of GitVerse, migrated from the Vite + React version 
 - PostgreSQL database (NeonDB recommended)
 - Google Gemini AI API key
 
+### Running the Development Environment
+
+To run both the Next.js frontend application and the background analysis worker concurrently with a single command, run:
+
+````bash
+npm run dev:all
+
 ## Setup Steps
 
 ### 1. Install Dependencies
@@ -15,7 +22,7 @@ This is the Next.js version of GitVerse, migrated from the Vite + React version 
 ```bash
 cd gitverse-nextjs
 npm install
-```
+````
 
 ### 2. Configure Environment
 
@@ -96,6 +103,18 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 - `/src/pages` - Page components (wrapped by App Router)
 - `/lib` - Server-side utilities and services
 
+### Running the Development Environment
+
+To run both the Next.js frontend application and the background analysis worker concurrently with a single command, run:
+
+````bash
+npm run dev:all
+
+### Step 2: Format and Stage the Files
+Now that everything is perfectly clean in your editor, run the formatter to ensure the lines meet the repository structure checks:
+```bash
+npm run format
+
 ### Key Files
 
 - `app/layout.tsx` - Root layout with providers
@@ -113,7 +132,7 @@ npm run dev          # Development server
 npm run build        # Production build
 npm start            # Production server
 npm run lint         # Lint code
-```
+````
 
 ### Database Management
 
