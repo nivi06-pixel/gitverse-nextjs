@@ -316,6 +316,8 @@ model AnalysisJob {
   lockedAt      DateTime? @map("locked_at")
   lockedBy      String?   @map("locked_by")
   lockExpiresAt DateTime? @map("lock_expires_at")
+  /// Random UUID regenerated on every claim, used to guard heartbeat / markDone / markFailed against stale-worker writes
+  lockToken     String?   @map("lock_token")
 
   startedAt  DateTime? @map("started_at")
   finishedAt DateTime? @map("finished_at")
