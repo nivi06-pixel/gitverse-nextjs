@@ -9,7 +9,7 @@
     "dev": "cross-env NODE_OPTIONS=\"--dns-result-order=ipv4first --no-network-family-autoselection\" next dev",
     "build": "prisma generate && npm run build:worker && next build",
     "analyze": "cross-env ANALYZE=true next build",
-    "typecheck": "prisma generate && rm -f tsconfig.tsbuildinfo && tsc -p tsconfig.json --noEmit",
+    "typecheck": "prisma generate && node -e \"try { require('fs').rmSync('tsconfig.tsbuildinfo'); } catch (e) {}\" && tsc -p tsconfig.json --noEmit",
     "build:worker": "tsc -p tsconfig.worker.json",
     "preworker": "npm run build:worker",
     "preworker:server": "npm run build:worker",
