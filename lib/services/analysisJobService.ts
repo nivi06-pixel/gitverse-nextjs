@@ -218,16 +218,11 @@ export class AnalysisJobService {
 
     let hasAccess = false;
 
-    // 1. User is the creator of the job
     if (job.userId === params.userId) {
       hasAccess = true;
-    } 
-    // 2. User is the owner of the repository
-    else if (job.repository.userId === params.userId) {
+    } else if (job.repository.userId === params.userId) {
       hasAccess = true;
-    } 
-    // 3. User has access via organization membership
-    else {
+    } else {
       const orgAccess = await prisma.repositoryPolicyAssignment.findFirst({
         where: {
           repositoryId: job.repositoryId,
@@ -248,7 +243,6 @@ export class AnalysisJobService {
       return null;
     }
 
-    // Strip the joined repository to match the expected return type
     const { repository, ...jobData } = job as any;
     return jobData as AnalysisJob;
   }
@@ -262,6 +256,7 @@ export class AnalysisJobService {
   async updateProgress(params: {
     jobId: string;
     workerId?: string;
+    lockToken?: string;
     update: JobProgressUpdate;
     extendLockMs?: number;
   }): Promise<void> {
@@ -274,6 +269,7 @@ export class AnalysisJobService {
     const where: any = { id: params.jobId };
     if (params.workerId) {
       where.lockedBy = params.workerId;
+      if (params.lockToken) where.lockToken = params.lockToken;
     }
 
     await prisma.analysisJob.update({
@@ -301,6 +297,7 @@ export class AnalysisJobService {
     const where: any = { id: params.jobId };
     if (params.workerId) {
       where.lockedBy = params.workerId;
+      if (params.lockToken) where.lockToken = params.lockToken;
     }
 
     await prisma.analysisJob.update({
@@ -314,6 +311,7 @@ export class AnalysisJobService {
         lockedAt: null,
         lockedBy: null,
         lockExpiresAt: null,
+        lockToken: null,
       },
     });
   }
@@ -329,6 +327,7 @@ export class AnalysisJobService {
   async markFailed(params: {
     jobId: string;
     workerId?: string;
+    lockToken?: string;
     error: string;
     attempts: number;
     maxAttempts: number;
@@ -336,6 +335,7 @@ export class AnalysisJobService {
     const where: any = { id: params.jobId };
     if (params.workerId) {
       where.lockedBy = params.workerId;
+      if (params.lockToken) where.lockToken = params.lockToken;
     }
 
     const shouldRetry =
@@ -353,6 +353,7 @@ export class AnalysisJobService {
           lockedAt: null,
           lockedBy: null,
           lockExpiresAt: null,
+          lockToken: null,
         },
       });
       return;
@@ -369,6 +370,7 @@ export class AnalysisJobService {
         lockedAt: null,
         lockedBy: null,
         lockExpiresAt: null,
+        lockToken: null,
       },
     });
   }
@@ -403,6 +405,19 @@ export class AnalysisJobService {
     await this.reclaimOrphanedJobs();
 
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        UPDATE analysis_jobs
+        SET
+          status = 'QUEUED',
+          locked_by = NULL,
+          locked_at = NULL,
+          lock_expires_at = NULL,
+          lock_token = NULL,
+          updated_at = NOW()
+        WHERE status = 'PROCESSING'
+          AND lock_expires_at < NOW()
+      `;
+
       const rows = await tx.$queryRaw<{ id: string }[]>`
         WITH candidate AS (
           SELECT a1.id
@@ -427,6 +442,7 @@ export class AnalysisJobService {
           locked_at = NOW(),
           locked_by = ${params.workerId},
           lock_expires_at = NOW() + (${lockMs}::int * INTERVAL '1 millisecond'),
+          lock_token = gen_random_uuid(),
           attempts = j.attempts + 1,
           started_at = COALESCE(j.started_at, NOW()),
           updated_at = NOW(),
@@ -453,10 +469,12 @@ export class AnalysisJobService {
   async releaseLock(params: {
     jobId: string;
     workerId?: string;
+    lockToken?: string;
   }): Promise<void> {
     const where: any = { id: params.jobId };
     if (params.workerId) {
       where.lockedBy = params.workerId;
+      if (params.lockToken) where.lockToken = params.lockToken;
     }
     await prisma.analysisJob.update({
       where,
@@ -491,6 +509,8 @@ export class AnalysisJobService {
         status: "QUEUED",
         lockedBy: null,
         lockedAt: null,
+        lockExpiresAt: null,
+        lockToken: null,
       },
     });
     return result.count;
@@ -522,11 +542,13 @@ export class AnalysisJobService {
   async markDrainReleased(params: {
     jobId: string;
     workerId?: string;
+    lockToken?: string;
     error: string;
   }): Promise<void> {
     const where: any = { id: params.jobId };
     if (params.workerId) {
       where.lockedBy = params.workerId;
+      if (params.lockToken) where.lockToken = params.lockToken;
     }
     await prisma.analysisJob.update({
       where,
@@ -535,6 +557,7 @@ export class AnalysisJobService {
         lockExpiresAt: new Date(),
         lockedAt: null,
         lockedBy: null,
+        lockToken: null,
         nextRunAt: new Date(),
         progressMessage: "Worker shutting down — job released for reprocessing",
         error: params.error,
@@ -559,7 +582,7 @@ export class AnalysisJobService {
         status: "PROCESSING",
         OR: [
           { lockExpiresAt: { lt: new Date() } },
-          { lockExpiresAt: null }
+          { lockExpiresAt: null },
         ],
         updatedAt: { lt: new Date(Date.now() - gracePeriodMs) },
       },
@@ -572,6 +595,7 @@ export class AnalysisJobService {
         lockedAt: null,
         lockedBy: null,
         lockExpiresAt: null,
+        lockToken: null,
       },
     });
     return stale.count;
@@ -589,6 +613,7 @@ export class AnalysisJobService {
   async heartbeat(params: {
     jobId: string;
     workerId: string;
+    lockToken: string;
     lockMs?: number;
   }): Promise<void> {
     const lockMs = params.lockMs ?? DEFAULT_LOCK_MS;
@@ -601,6 +626,7 @@ export class AnalysisJobService {
       WHERE id = ${params.jobId}::uuid
         AND status = 'PROCESSING'
         AND locked_by = ${params.workerId}
+        AND lock_token = ${params.lockToken}::uuid
     `;
   }
 }
