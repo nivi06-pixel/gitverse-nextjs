@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const handler = async (req: any, ctx: any) => {
-  if (process.env.PLAYWRIGHT_TEST === "true") {
+  if (process.env.PLAYWRIGHT_TEST === "true" && process.env.NODE_ENV !== "production") {
     try {
       const cookieStore = cookies();
       const mockSession = cookieStore.get("mock-session")?.value;

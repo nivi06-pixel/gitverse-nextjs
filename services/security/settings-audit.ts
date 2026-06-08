@@ -23,11 +23,11 @@ export class SettingsAuditService {
       await prisma.auditLog.create({
         data: {
           userId: entry.userId,
+          repositoryId: entry.repositoryId ?? null,
+          organizationId: entry.organizationId ?? null,
           action: entry.action,
           resource: "Settings",
           details: {
-            repositoryId: entry.repositoryId,
-            organizationId: entry.organizationId,
             previousValue: entry.previousValue,
             newValue: entry.newValue,
             ipAddress: entry.ipAddress,
@@ -57,12 +57,7 @@ export class SettingsAuditService {
     limit: number = 50
   ) {
     return prisma.auditLog.findMany({
-      where: {
-        details: {
-          path: ["repositoryId"],
-          equals: repositoryId,
-        },
-      },
+      where: { repositoryId },
       orderBy: { createdAt: "desc" },
       take: limit,
     });
@@ -72,16 +67,11 @@ export class SettingsAuditService {
    * Retrieves audit log entries for a specific organization.
    */
   public static async getLogsForOrganization(
-    organizationId: number,
+    organizationId: string,
     limit: number = 50
   ) {
     return prisma.auditLog.findMany({
-      where: {
-        details: {
-          path: ["organizationId"],
-          equals: organizationId,
-        },
-      },
+      where: { organizationId },
       orderBy: { createdAt: "desc" },
       take: limit,
     });
