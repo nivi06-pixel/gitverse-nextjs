@@ -64,10 +64,10 @@ export default function WebhookInspectorPage() {
     }
   }, [skip, statusFilter, eventFilter, idFilter]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     setSkip(0);
     fetchEvents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, eventFilter, idFilter]);
 
   const toggleExpand = async (id: string) => {
