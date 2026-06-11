@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isHttpError, requireAuth , sanitizeError } from "@/lib/middleware";
+import { isHttpError, requireAuth, sanitizeError } from "@/lib/middleware";
 import { repositoryService } from "@/lib/services/repositoryService";
 import { analysisJobService } from "@/lib/services/analysisJobService";
 import prisma from "@/lib/prisma";
@@ -11,21 +11,17 @@ export async function POST(
     const user = await requireAuth(request);
     const id = parseInt(params.id);
 
+    const rl = await checkRateLimit(String(user.userId), RATE_LIMITS.REPOSITORY_ANALYZE);
+    if (!rl.allowed) return rateLimitResponse(rl);
+
     if (isNaN(id)) {
-      return NextResponse.json(
-        { error: "Invalid repository ID" },
-        { status: 400 }
-      );
+      return apiError(400, "Invalid repository ID");
     }
 
-    // Verify ownership
     const repository = await repositoryService.getRepository(id, user.userId);
 
     if (!repository) {
-      return NextResponse.json(
-        { error: "Repository not found" },
-        { status: 404 }
-      );
+      return apiError(404, "Repository not found");
     }
     const maxConcurrentJobs = Number(
   process.env.MAX_CONCURRENT_ANALYSIS_PER_USER || 3
@@ -51,36 +47,10 @@ if (activeJobsCount >= maxConcurrentJobs) {
   );
 }
 
-    const existingJob = await prisma.analysisJob.findFirst({
-  where: {
-    repositoryId: id,
-    status: {
-      in: ["QUEUED", "PROCESSING"],
-    },
-  },
-});
+    const { scope } = await request.json();
 
-if (existingJob) {
-  return NextResponse.json(
-    {
-      error: "Analysis already in progress",
-      jobId: existingJob.id,
-    },
-    { status: 409 }
-  );
-}
-
-    const bodyText = await request.text();
-    let scope: string | undefined = undefined;
-    if (bodyText) {
-      try {
-        const json = JSON.parse(bodyText);
-        if (json.scope && typeof json.scope === "string") {
-          scope = json.scope;
-        }
-      } catch (e) {
-        // ignore JSON parse errors
-      }
+    if (scope != null && (typeof scope !== "string" || !isValidGitScope(scope))) {
+      return apiError(400, "Invalid scope. Only alphanumeric characters, underscore, dot, slash, and hyphen are allowed.");
     }
 
     const job = await analysisJobService.createRepositoryAnalysisJob({
@@ -89,6 +59,9 @@ if (existingJob) {
       scope,
     });
 
+    // Invalidate cached stats — repo status is now "analyzing" / queued.
+    ttlCache.deleteByPrefix(`repo-stats:${id}:`);
+
     return NextResponse.json(
       { message: "Job queued", jobId: job.id, status: job.status },
       { status: 202 }
@@ -96,14 +69,8 @@ if (existingJob) {
   } catch (error: any) {
     console.error("Analyze repository error:", sanitizeError(error));
     if (isHttpError(error)) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status }
-      );
+      return apiError(error.status, error.message);
     }
-    return NextResponse.json(
-      { error: "Failed to start analysis" },
-      { status: 500 }
-    );
+    return apiError(500, "Failed to start analysis");
   }
 }

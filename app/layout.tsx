@@ -1,11 +1,27 @@
 import "@/lib/env";
 import { ReactNode } from "react";
 import { Metadata } from "next";
-import { ThemeProvider } from "@/context/ThemeContext";
+import { Inter, Source_Sans_3 } from "next/font/google";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { NextAuthProvider } from "@/components/auth/NextAuthProvider";
 import { Toaster } from "@/components/ui/toaster";
+import { SessionExpiryHandler } from "@/components/auth/SessionExpiryHandler";
 import "./globals.css";
+
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const sourceSans = Source_Sans_3({
+  subsets: ["latin"],
+  variable: "--font-source-sans",
+  display: "swap",
+});
+
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://gitverse.dev";
 
 export const metadata: Metadata = {
@@ -54,11 +70,10 @@ export const metadata: Metadata = {
   },
 };
 
-
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
-      <body>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${inter.variable} ${sourceSans.variable}`}>
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:bg-black focus:text-white focus:px-4 focus:py-2 focus:rounded"
@@ -69,10 +84,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <ThemeProvider>
           <NextAuthProvider>
             <AuthProvider>
-              <main id="main-content">
-                {children}
-              </main>
-
+              <SessionExpiryHandler />
+              {children}
               <Toaster />
             </AuthProvider>
           </NextAuthProvider>
